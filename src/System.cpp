@@ -5,23 +5,45 @@ namespace TII
 
 VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode mode /* = SlamMode::STEREO*/) : mConfigFile(configFile), mMode(mode)
 {
+
+  mMap = std::make_shared<Map>();
+
   if (mode == SlamMode::MONOCULAR)
   {
-    mMonoCamera = std::make_shared<Camera>(configFile, "Camera_l");
-    std::cout << "Monocular Camera Initialized.." << std::endl;
+    InitializeMonocular();
   }
   else
   {
-    auto cameraLeft = std::make_shared<Camera>(configFile, "Camera_l");
-    auto cameraRight = std::make_shared<Camera>(configFile, "Camera_r");
-    mStereoCamera = std::make_shared<StereoCamera>(configFile, cameraLeft, cameraRight);
-    std::cout << "Stereo Camera Initialized.." << std::endl;
+    InitializeStereo();
   }
 
+
+
+  
+  mFeatureTracker = std::shared_ptr<FeatureTracker>();
   mFeatureTrackingThread = {};
   mOptimizerThread = {};
   mVisualizer = std::make_shared<Visualizer>();
   mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
+}
+
+void VSlamSystem::InitializeMonocular()
+{
+  mMonoCamera = std::make_shared<Camera>(configFile, "Camera_l");
+  mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
+  // mFeatureTracker = std::shared_ptr<FeatureTracker>();
+  std::cout << "Monocular Camera Initialized.." << std::endl;
+}
+
+void VSlamSystem::InitializeStereo()
+{
+  auto cameraLeft = std::make_shared<Camera>(configFile, "Camera_l");
+  auto cameraRight = std::make_shared<Camera>(configFile, "Camera_r");
+  mStereoCamera = std::make_shared<StereoCamera>(configFile, cameraLeft, cameraRight);
+  mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
+  mFeatureExtractorRight = std::make_shared<FeatureExtractor>();
+  mFeatureTracker = std::shared_ptr<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
+  std::cout << "Stereo Camera Initialized.." << std::endl;
 }
 
 void VSlamSystem::GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera)

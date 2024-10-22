@@ -92,11 +92,22 @@ src/Settings.cpp
 src/Camera.cpp
 src/Visualization.cpp
 src/Map.cpp
+src/FeatureExtractor.cpp
+src/FeatureTracker.cpp
+src/FeatureMatcher.cpp
+src/KeyFrame.cpp
+src/Optimizer.cpp
+include/Optimizer.h
+include/KeyFrame.h
+include/FeatureMatcher.h
+include/FeatureTracker.h
+include/FeatureExtractor.h
 include/Map.h
 include/Visualization.h
 include/Camera.h
 include/System.h
 include/Settings.h
+include/Conversions.h
 )
 # endif()
 
