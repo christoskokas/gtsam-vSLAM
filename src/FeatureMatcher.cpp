@@ -3,7 +3,7 @@
 namespace TII
 {
 
-FeatureMatcher::FeatureMatcher(const StereoCamera* _zed, const FeatureExtractor* _feLeft, const FeatureExtractor* _feRight, const int _imageHeight) : zedptr(_zed), feLeft(_feLeft), feRight(_feRight), imageHeight(_imageHeight)
+FeatureMatcher::FeatureMatcher(const std::shared_ptr<StereoCamera> _zed, const std::shared_ptr<FeatureExtractor> _feLeft, const std::shared_ptr<FeatureExtractor> _feRight, const int _imageHeight) : zedptr(_zed), feLeft(_feLeft), feRight(_feRight), imageHeight(_imageHeight)
 {
 
 }

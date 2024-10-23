@@ -42,7 +42,7 @@ void VSlamSystem::InitializeStereo()
   mStereoCamera = std::make_shared<StereoCamera>(mConfigFile, cameraLeft, cameraRight);
   mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
   mFeatureExtractorRight = std::make_shared<FeatureExtractor>();
-  mFeatureTracker = std::shared_ptr<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
+  mFeatureTracker = std::make_shared<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
   std::cout << "Stereo Camera Initialized.." << std::endl;
 }
 

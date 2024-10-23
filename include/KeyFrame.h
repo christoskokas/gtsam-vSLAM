@@ -73,15 +73,11 @@ class KeyFrame
 
         void setBackPose(const Eigen::Matrix4d& _backPose);
         void eraseMPConnection(const int mpPos);
-        void eraseMPConnectionB(const int mpPos);
         void eraseMPConnection(const std::pair<int,int>& mpPos);
-        void eraseMPConnectionB(const std::pair<int,int>& mpPos);
         void eraseMPConnectionR(const int mpPos);
-        void eraseMPConnectionRB(const int mpPos);
         KeyFrame(Eigen::Matrix4d _pose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         KeyFrame(const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
-        KeyFrame(const StereoCamera* _zedCam, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
-        KeyFrame(const StereoCamera* _zedCam, const StereoCamera* _zedCamB, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
+        KeyFrame(const std::shared_ptr<StereoCamera> _zedCam, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         Eigen::Vector4d getWorldPosition(int idx);
         void getConnectedKFs(std::vector<KeyFrame*>& activeKF, const int N);
         void getConnectedKFsLC(const Map* map, std::vector<KeyFrame*>& activeKF);
