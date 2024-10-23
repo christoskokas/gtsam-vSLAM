@@ -1,5 +1,5 @@
-#ifndef MAP_H
-#define MAP_H
+#ifndef OPTIMIZER_H
+#define OPTIMIZER_H
 
 #include "Camera.h"
 #include <thread>
@@ -9,21 +9,8 @@
 namespace TII
 {
 
-  class MapPoint
-  {
-    public:
-    MapPoint(const Eigen::Vector4d& worldPos);
-    Eigen::Vector4d mWorldPos4d;
-    Eigen::Vector3d mWorldPos3d;
-  };
-
-  class Map
-  {
-    CameraPose mCameraPose;
-    std::shared_ptr<std::vector<MapPoint>> mMapPoints;
-  };
 
 } // namespace TII
 
 
-#endif // MAP_H
+#endif // OPTIMIZER_H

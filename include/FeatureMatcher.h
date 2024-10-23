@@ -12,7 +12,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <opencv2/video/tracking.hpp>
 
-namespace DC_VSLAM
+namespace TII
 {
 
 class Map;
@@ -30,17 +30,15 @@ class FeatureMatcher
         const float ratioLBA {0.6};
 
 
-        const Zed_Camera* zedptr;
+        const StereoCamera* zedptr;
 
     public:
         const int closeNumber {40};
         const FeatureExtractor* feLeft, *feRight;
         const int imageHeight;
 
-        FeatureMatcher(const Zed_Camera* _zed, const FeatureExtractor* _feLeft, const FeatureExtractor* _feRight, const int _imageHeight = 360);
+        FeatureMatcher(const StereoCamera* _zed, const FeatureExtractor* _feLeft, const FeatureExtractor* _feRight, const int _imageHeight = 360);
 
-        // match by projection between keyframes 
-        int matchByProjectionRPredLBAB(const Zed_Camera* zedCam, const KeyFrame* lastKF, KeyFrame* newKF, std::vector<std::vector<std::pair<KeyFrame*,std::pair<int, int>>>>& matchedIdxs, const float rad, const std::vector<std::pair<cv::Point2f, cv::Point2f>>& predPoints, const std::vector<float>& maxDistsScale, std::vector<std::pair<Eigen::Vector4d,std::pair<int,int>>>& p4d, const bool back);
         int matchByProjectionRPredLBA(const KeyFrame* lastKF, KeyFrame* newKF, std::vector<std::vector<std::pair<KeyFrame*,std::pair<int, int>>>>& matchedIdxs, const float rad, const std::vector<std::pair<cv::Point2f, cv::Point2f>>& predPoints, const std::vector<float>& maxDistsScale, std::vector<std::pair<Eigen::Vector4d,std::pair<int,int>>>& p4d);
 
         // destribute right keypoints to vector for faster stereo matching
@@ -60,6 +58,6 @@ class FeatureMatcher
 
 };
 
-} // namespace DC_VSLAM
+} // namespace TII
 
 #endif // FEATUREMATCHER_H

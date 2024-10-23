@@ -1,5 +1,5 @@
-#ifndef MAP_H
-#define MAP_H
+#ifndef FEATUREEXTRACTOR_H
+#define FEATUREEXTRACTOR_H
 
 #include <thread>
 #include <string>
@@ -99,4 +99,4 @@ class FeatureExtractor
 } // namespace TII
 
 
-#endif // MAP_H
+#endif // FEATUREEXTRACTOR_H
