@@ -1,14 +1,14 @@
 #include "FeatureTracker.h"
 
-namespace DC_VSLAM
+namespace TII
 {
 
-FeatureTracker::FeatureTracker(StereoCamera* _zedPtr, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, Map* _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fmB(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fx(_zedPtr->cameraLeft.fx), fy(_zedPtr->cameraLeft.fy), cx(_zedPtr->cameraLeft.cx), cy(_zedPtr->cameraLeft.cy), activeMapPoints(_map->activeMapPoints), activeMapPointsB(_map->activeMapPointsB), allFrames(_map->allFramesPoses)
+FeatureTracker::FeatureTracker(Zed_Camera* _zedPtr, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, Map* _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fmB(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fx(_zedPtr->cameraLeft.fx), fy(_zedPtr->cameraLeft.fy), cx(_zedPtr->cameraLeft.cx), cy(_zedPtr->cameraLeft.cy), activeMapPoints(_map->activeMapPoints), activeMapPointsB(_map->activeMapPointsB), allFrames(_map->allFramesPoses)
 {
     allFrames.reserve(zedPtr->numOfFrames);
 }
 
-FeatureTracker::FeatureTracker(StereoCamera* _zedPtr, StereoCamera* _zedPtrB, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, FeatureExtractor* _feLeftB, FeatureExtractor* _feRightB, Map* _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), feLeftB(_feLeftB), feRightB(_feRightB), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fmB(_zedPtrB, _feLeftB, _feRightB, zedPtr->mHeight), fx(_zedPtr->cameraLeft.fx), fy(_zedPtr->cameraLeft.fy), cx(_zedPtr->cameraLeft.cx), cy(_zedPtr->cameraLeft.cy), activeMapPoints(_map->activeMapPoints), activeMapPointsB(_map->activeMapPointsB), allFrames(_map->allFramesPoses)
+FeatureTracker::FeatureTracker(Zed_Camera* _zedPtr, Zed_Camera* _zedPtrB, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, FeatureExtractor* _feLeftB, FeatureExtractor* _feRightB, Map* _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), feLeftB(_feLeftB), feRightB(_feRightB), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fmB(_zedPtrB, _feLeftB, _feRightB, zedPtr->mHeight), fx(_zedPtr->cameraLeft.fx), fy(_zedPtr->cameraLeft.fy), cx(_zedPtr->cameraLeft.cx), cy(_zedPtr->cameraLeft.cy), activeMapPoints(_map->activeMapPoints), activeMapPointsB(_map->activeMapPointsB), allFrames(_map->allFramesPoses)
 {
     zedPtrB = _zedPtrB;
     fxb = zedPtrB->cameraLeft.fx;
@@ -62,7 +62,7 @@ void FeatureTracker::extractORBStereoMatchR(cv::Mat& leftIm, cv::Mat& rightIm, T
 
 }
 
-void FeatureTracker::extractORBStereoMatchRB(const StereoCamera* zedCam, cv::Mat& leftIm, cv::Mat& rightIm, FeatureExtractor* feLeft, FeatureExtractor* feRight, FeatureMatcher& fm, TrackedKeys& keysLeft)
+void FeatureTracker::extractORBStereoMatchRB(const Zed_Camera* zedCam, cv::Mat& leftIm, cv::Mat& rightIm, FeatureExtractor* feLeft, FeatureExtractor* feRight, FeatureMatcher& fm, TrackedKeys& keysLeft)
 {
     std::thread extractLeft(&FeatureExtractor::extractKeysNew, std::ref(feLeft), std::ref(leftIm), std::ref(keysLeft.keyPoints), std::ref(keysLeft.Desc));
     std::thread extractRight(&FeatureExtractor::extractKeysNew, std::ref(feRight), std::ref(rightIm), std::ref(keysLeft.rightKeyPoints),std::ref(keysLeft.rightDesc));
@@ -235,7 +235,7 @@ bool FeatureTracker::check2dError(Eigen::Vector4d& p4d, const cv::Point2f& obs, 
         return false;
 }
 
-bool FeatureTracker::check2dErrorB(const StereoCamera* zedCam, Eigen::Vector4d& p4d, const cv::Point2f& obs, const double thres, const double weight)
+bool FeatureTracker::check2dErrorB(const Zed_Camera* zedCam, Eigen::Vector4d& p4d, const cv::Point2f& obs, const double thres, const double weight)
 {
     if ( p4d(2) <= 0 )
         return true;
@@ -328,7 +328,7 @@ int FeatureTracker::findOutliersR(const Eigen::Matrix4d& estimPose, std::vector<
     return nStereo;
 }
 
-int FeatureTracker::findOutliersRB(const StereoCamera* zedCam, const Eigen::Matrix4d& estimPose, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, int& nInliers)
+int FeatureTracker::findOutliersRB(const Zed_Camera* zedCam, const Eigen::Matrix4d& estimPose, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, int& nInliers)
 {
     const Eigen::Matrix4d estimPoseInv = estimPose.inverse();
     const Eigen::Matrix4d toCameraR = (estimPoseInv * zedCam->extrinsics).inverse();
@@ -765,7 +765,7 @@ bool FeatureTracker::worldToFrameRTrack(MapPoint* mp, const bool right, const Ei
     return true;
 }
 
-bool FeatureTracker::worldToFrameRTrackB(MapPoint* mp, const StereoCamera* zedCam, const bool right, const Eigen::Matrix4d& predPoseInv)
+bool FeatureTracker::worldToFrameRTrackB(MapPoint* mp, const Zed_Camera* zedCam, const bool right, const Eigen::Matrix4d& predPoseInv)
 {
     Eigen::Vector4d wPos = mp->getWordPose4d();
     Eigen::Vector4d point = predPoseInv * wPos;
@@ -1171,7 +1171,7 @@ void FeatureTracker::changePosesLCAB(const int endIdx)
 
 }
 
-void FeatureTracker::removeOutOfFrameMPsRB(const StereoCamera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints)
+void FeatureTracker::removeOutOfFrameMPsRB(const Zed_Camera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints)
 {
     const size_t end{activeMapPoints.size()};
     Eigen::Matrix4d toRCamera = (predNPose * zedCam->extrinsics).inverse();
@@ -1278,7 +1278,7 @@ void FeatureTracker::newPredictMPs(const Eigen::Matrix4d& currCamPose, const Eig
     }
 }
 
-void FeatureTracker::newPredictMPsB(const StereoCamera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers)
+void FeatureTracker::newPredictMPsB(const Zed_Camera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers)
 {
     const size_t end{activeMapPoints.size()};
     Eigen::Matrix4d toRCamera = (predNPose * zedCam->extrinsics).inverse();
@@ -1762,4 +1762,4 @@ void FeatureTracker::publishPoseNewB()
 }
 
 
-} // namespace DC_VSLAM
+} // namespace TII

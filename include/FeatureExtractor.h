@@ -1,9 +1,8 @@
-#ifndef MAP_H
-#define MAP_H
+#ifndef FEATUREEXTRACTOR_H
+#define FEATUREEXTRACTOR_H
 
-#include <thread>
-#include <string>
-#include <Eigen/Dense>
+#include "Settings.h"
+#include <iostream>
 #include <opencv2/calib3d.hpp>
 #include "opencv2/highgui.hpp"
 #include "opencv2/features2d.hpp"
@@ -52,6 +51,12 @@ struct TrackedKeys
 class FeatureExtractor
 {
 
+    const int nFeatures;
+    const int edgeThreshold;
+    const int patchSize;
+    const int halfPatchSize {15};
+    const int maxFastThreshold;
+    const int minFastThreshold;
     
 
     std::vector<cv::Point> pattern;
@@ -59,44 +64,37 @@ class FeatureExtractor
     std::vector<int> umax;
 
     public:
-      const int nFeatures;
-      const size_t nLevels;
-      const float imScale;
-      const int edgeThreshold;
-      const int patchSize;
-      const int halfPatchSize {15};
-      const int maxFastThreshold;
-      const int minFastThreshold;
+        const float imScale;
+        const int nLevels;
 
-      std::vector <cv::Mat> imagePyramid;
-      std::vector<int>scaledPatchSize;
-      std::vector < float > scalePyramid;
-      std::vector < float > scaleInvPyramid;
-      std::vector < float > sigmaFactor;
-      std::vector < float > InvSigmaFactor;
-      std::vector < int > featurePerLevel;
-      
-      
-      FeatureExtractor(const int _nfeatures = 2000, const int _nLevels = 8, const float _imScale = 1.2f, const int _edgeThreshold = 19, const int _patchSize = 31, const int _maxFastThreshold = 20, const int _minFastThreshold = 7);
+        std::vector <cv::Mat> imagePyramid;
+        std::vector<int>scaledPatchSize;
+        std::vector < float > scalePyramid;
+        std::vector < float > scaleInvPyramid;
+        std::vector < float > sigmaFactor;
+        std::vector < float > InvSigmaFactor;
+        std::vector < int > featurePerLevel;
+        
+        
+        FeatureExtractor(const int _nfeatures = 2000, const int _nLevels = 8, const float _imScale = 1.2f, const int _edgeThreshold = 19, const int _patchSize = 31, const int _maxFastThreshold = 20, const int _minFastThreshold = 7);
 
-      // ssc from https://github.com/BAILOOL/ANMS-Codes
-      std::vector<cv::KeyPoint> ssc(std::vector<cv::KeyPoint> keyPoints, int numRetPoints,
-                        float tolerance, int cols, int rows);
+        // ssc from https://github.com/BAILOOL/ANMS-Codes
+        std::vector<cv::KeyPoint> ssc(std::vector<cv::KeyPoint> keyPoints, int numRetPoints,
+                         float tolerance, int cols, int rows);
 
-      // extract keypoints
-      void extractKeysNew(cv::Mat& image, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
-      void computeKeypointsORBNew(cv::Mat& image, std::vector<std::vector<cv::KeyPoint>>& allKeys);
+        // extract keypoints
+        void extractKeysNew(cv::Mat& image, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
+        void computeKeypointsORBNew(cv::Mat& image, std::vector<std::vector<cv::KeyPoint>>& allKeys);
 
-      // compute orientations for rotation invariance
-      void computeAllOrientations(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints);
-      float computeOrientation(const cv::Mat& image, const cv::Point2f& point);
+        // compute orientations for rotation invariance
+        void computeAllOrientations(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints);
+        float computeOrientation(const cv::Mat& image, const cv::Point2f& point);
 
-      // compute pyramid of image for scale invariance
-      void computePyramid(const cv::Mat& image);
+        // compute pyramid of image for scale invariance
+        void computePyramid(const cv::Mat& image);
     
 };
 
 } // namespace TII
 
-
-#endif // MAP_H
+#endif // FEATUREEXTRACTOR_H

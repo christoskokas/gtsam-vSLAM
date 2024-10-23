@@ -14,7 +14,7 @@
 #include <iostream>
 #include <random>
 
-namespace DC_VSLAM
+namespace TII
 {
 
 class ImageData
@@ -56,8 +56,8 @@ class FeatureTracker
         int curFrameNumb {-1};
 
         ImageData pLIm, pRIm, lIm, rIm;
-        StereoCamera* zedPtr;
-        StereoCamera* zedPtrB = nullptr;
+        Zed_Camera* zedPtr;
+        Zed_Camera* zedPtrB = nullptr;
         Map* map;
         FeatureMatcher fm;
         FeatureMatcher fmB;
@@ -74,8 +74,8 @@ class FeatureTracker
 
     public :
 
-        FeatureTracker(StereoCamera* _zedPtr, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, Map* _map);
-        FeatureTracker(StereoCamera* _zedPtr, StereoCamera* _zedPtrB, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, FeatureExtractor* _feLeftB, FeatureExtractor* _feRightB, Map* _map);
+        FeatureTracker(Zed_Camera* _zedPtr, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, Map* _map);
+        FeatureTracker(Zed_Camera* _zedPtr, Zed_Camera* _zedPtrB, FeatureExtractor* _feLeft, FeatureExtractor* _feRight, FeatureExtractor* _feLeftB, FeatureExtractor* _feRightB, Map* _map);
 
         // main tracking function
         void TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb);
@@ -83,7 +83,7 @@ class FeatureTracker
 
         // extract orb features
         void extractORBStereoMatchR(cv::Mat& leftIm, cv::Mat& rightIm, TrackedKeys& keysLeft);
-        void extractORBStereoMatchRB(const StereoCamera* zedCam, cv::Mat& leftIm, cv::Mat& rightIm, FeatureExtractor* feLeft, FeatureExtractor* feRight, FeatureMatcher& fm, TrackedKeys& keysLeft);
+        void extractORBStereoMatchRB(const Zed_Camera* zedCam, cv::Mat& leftIm, cv::Mat& rightIm, FeatureExtractor* feLeft, FeatureExtractor* feRight, FeatureMatcher& fm, TrackedKeys& keysLeft);
 
         // Initialize map with 3D mappoints
         void initializeMapR(TrackedKeys& keysLeft);
@@ -94,11 +94,11 @@ class FeatureTracker
 
         // remove mappoints that are out of frame
         void removeOutOfFrameMPsR(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints);
-        void removeOutOfFrameMPsRB(const StereoCamera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints);
+        void removeOutOfFrameMPsRB(const Zed_Camera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints);
 
         // 3d world coords to frame coords
         bool worldToFrameRTrack(MapPoint* mp, const bool right, const Eigen::Matrix4d& predPoseInv, const Eigen::Matrix4d& tempPose);
-        bool worldToFrameRTrackB(MapPoint* mp, const StereoCamera* zedCam, const bool right, const Eigen::Matrix4d& predPoseInv);
+        bool worldToFrameRTrackB(MapPoint* mp, const Zed_Camera* zedCam, const bool right, const Eigen::Matrix4d& predPoseInv);
 
         // pose estimation ( Ceres Solver )
         std::pair<int,int> estimatePoseCeresR(std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, const bool first);
@@ -106,11 +106,11 @@ class FeatureTracker
 
         // check for outliers after pose estimation
         int findOutliersR(const Eigen::Matrix4d& estimatedP, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, const std::vector<float>& weights, int& nInliers);
-        int findOutliersRB(const StereoCamera* zedCam, const Eigen::Matrix4d& estimatedP, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, int& nInliers);
+        int findOutliersRB(const Zed_Camera* zedCam, const Eigen::Matrix4d& estimatedP, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, int& nInliers);
 
         // predict position of 3d mappoints with predicted camera pose
         void newPredictMPs(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers);
-        void newPredictMPsB(const StereoCamera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers);
+        void newPredictMPsB(const Zed_Camera* zedCam, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers);
 
         // insert KF if needed
         void insertKeyFrameR(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const int nStereo, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm);
@@ -118,7 +118,7 @@ class FeatureTracker
 
         // check 2d Error
         bool check2dError(Eigen::Vector4d& p4d, const cv::Point2f& obs, const double thres, const double weight);
-        bool check2dErrorB(const StereoCamera* zedCam, Eigen::Vector4d& p4d, const cv::Point2f& obs, const double thres, const double weight);
+        bool check2dErrorB(const Zed_Camera* zedCam, Eigen::Vector4d& p4d, const cv::Point2f& obs, const double thres, const double weight);
 
         // change camera poses after either Local BA or Global BA
         void changePosesLCA(const int endIdx);
@@ -141,7 +141,7 @@ class FeatureTracker
 
 
 
-} // namespace DC_VSLAM
+} // namespace TII
 
 
 #endif // FEATURETRACKER_H

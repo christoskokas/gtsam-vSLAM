@@ -340,7 +340,7 @@ float FeatureExtractor::computeOrientation(const cv::Mat& image, const cv::Point
 
 void FeatureExtractor::computePyramid(const cv::Mat& image)
 {
-    for (size_t level = 0; level < nLevels; ++level)
+    for (int level = 0; level < nLevels; ++level)
     {
         float scale = scaleInvPyramid[level];
         cv::Size sz(cvRound((float)image.cols*scale), cvRound((float)image.rows*scale));
@@ -536,6 +536,7 @@ void FeatureExtractor::computeKeypointsORBNew(cv::Mat& image, std::vector<std::v
 
     const int fastEdge = 3;
 
+    int gridsWKeys {0};
     allKeys.resize(nLevels);
     
     const float W = 35;
@@ -606,7 +607,7 @@ void FeatureExtractor::computeKeypointsORBNew(cv::Mat& image, std::vector<std::v
 
         }
         const int fPLevel = featurePerLevel[level];
-        if ( allKeys[level].size() > static_cast<size_t>(fPLevel) )
+        if ( allKeys[level].size() > fPLevel )
         {
             allKeys[level] = ssc(allKeys[level], fPLevel, 0.1, imagePyramid[level].cols, imagePyramid[level].rows);
         }
@@ -626,7 +627,7 @@ FeatureExtractor::FeatureExtractor(const int _nfeatures, const int _nLevels, con
     scaleInvPyramid[0] = 1.0f;
     sigmaFactor[0] = 1.0f;
     scaledPatchSize[0] = patchSize;
-    for(size_t i=1; i<nLevels; i++)
+    for(int i=1; i<nLevels; i++)
     {
         scalePyramid[i]=scalePyramid[i-1]*imScale;
         scaledPatchSize[i] = patchSize * scalePyramid[i];
@@ -636,7 +637,7 @@ FeatureExtractor::FeatureExtractor(const int _nfeatures, const int _nLevels, con
     scaleInvPyramid.resize(nLevels);
     InvSigmaFactor.resize(nLevels);
 
-    for(size_t i=0; i<nLevels; i++)
+    for(int i=0; i<nLevels; i++)
     {
         scaleInvPyramid[i]=1.0f/scalePyramid[i];
         InvSigmaFactor[i]=1.0f/sigmaFactor[i];
@@ -649,7 +650,7 @@ FeatureExtractor::FeatureExtractor(const int _nfeatures, const int _nLevels, con
     float nDesiredFeaturesPerScale = nFeatures*(1 - factor)/(1 - (float)pow((double)factor, (double)nLevels));
 
     int sumFeatures = 0;
-    for( size_t level = 0; level < nLevels-1; level++ )
+    for( int level = 0; level < nLevels-1; level++ )
     {
         featurePerLevel[level] = cvRound(nDesiredFeaturesPerScale);
         sumFeatures += featurePerLevel[level];

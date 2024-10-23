@@ -24,7 +24,7 @@ namespace TII
       VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode mode = SlamMode::STEREO);
       void InitializeMonocular();
       void InitializeStereo();
-      void GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera);
+      void GetStereoCamera(std::shared_ptr<Zed_Camera>& stereoCamera);
       void StartSystem();
       void TrackMonoCular();
       void TrackStereo();
@@ -38,7 +38,7 @@ namespace TII
     std::thread mOptimizerThread;
     std::thread mVisualizationThread;
 
-    std::shared_ptr<StereoCamera> mStereoCamera {};
+    std::shared_ptr<Zed_Camera> mStereoCamera {};
     std::shared_ptr<Camera> mMonoCamera {};
     std::shared_ptr<Visualizer> mVisualizer;
     std::shared_ptr<ConfigFile> mConfigFile;

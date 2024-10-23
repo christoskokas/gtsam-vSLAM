@@ -1,6 +1,6 @@
 #include "FeatureMatcher.h"
 
-namespace DC_VSLAM
+namespace TII
 {
 
 FeatureMatcher::FeatureMatcher(const Zed_Camera* _zed, const FeatureExtractor* _feLeft, const FeatureExtractor* _feRight, const int _imageHeight) : zedptr(_zed), feLeft(_feLeft), feRight(_feRight), imageHeight(_imageHeight)
@@ -763,4 +763,4 @@ void FeatureMatcher::destributeRightKeys(const std::vector < cv::KeyPoint >& rig
 
 }
 
-} // namespace DC_VSLAM
+} // namespace TII

@@ -2,22 +2,28 @@
 #define CAMERA_H
 
 #include "Settings.h"
-#include <thread>
+#include <unistd.h>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string>
 #include <opencv2/imgproc/imgproc.hpp>
 #include "opencv2/highgui.hpp"
 #include "opencv2/features2d.hpp"
 #include "opencv2/core.hpp"
+#include <yaml-cpp/yaml.h>
 #include <Eigen/Core>
-#include <Eigen/Dense>
+#include <Eigen/LU>
+#include <chrono>
+
 
 namespace TII
 {
 
-  class CameraPose
-  {
-      private:
-      public:
+class CameraPose
+{
+    private:
+    public:
         Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
         Eigen::Matrix4d refPose = Eigen::Matrix4d::Identity();
         Eigen::Matrix4d poseInverse = Eigen::Matrix4d::Identity();
@@ -38,58 +44,63 @@ namespace TII
 
         // set inv pose from local/global BA
         void setInvPose(const Eigen::Matrix4d poseT);
-  };
+};
 
-  class Camera
-  {
+/**
+ * @brief Camera class that contains intrinsic values
+ * 
+ */
 
-    public:
-    Camera(const std::shared_ptr<ConfigFile> configFile, const std::string& camPath);
-    const std::shared_ptr<ConfigFile> mConfigFile;
-    void setIntrinsicValuesUnR(const std::string& cameraPath);
-    void setIntrinsicValuesR(const std::string& cameraPath);
-    cv::Mat D = cv::Mat::zeros(1,5,CV_64F);
-    cv::Mat K = cv::Mat::eye(3,3,CV_64F);
-    cv::Mat R = cv::Mat::eye(3,3,CV_64F);
-    cv::Mat P = cv::Mat::eye(3,4,CV_64F);
-
+class Camera
+{
     private:
-    bool rectified {};
-    double fx {},fy {},cx {}, cy {};
-    double k1 {}, k2 {}, p1 {}, p2 {}, k3{};
-    Eigen::Matrix<double,3,3> intrinsics = Eigen::Matrix<double,3,3>::Identity();
-    
-  };
-
-  class StereoCamera
-  {
     public:
-    bool addKeyFrame {false};
-    bool rectified {};
-    float mBaseline, mFps;
-    int mWidth, mHeight;
-    size_t numOfFrames {};
+        double fx {},fy {},cx {}, cy {};
+        double k1 {}, k2 {}, p1 {}, p2 {}, k3{};
+        cv::Mat D = cv::Mat::zeros(1,5,CV_64F);
+        cv::Mat K = cv::Mat::eye(3,3,CV_64F);
+        cv::Mat R = cv::Mat::eye(3,3,CV_64F);
+        cv::Mat P = cv::Mat::eye(3,4,CV_64F);
+        Eigen::Matrix<double,3,3> intrinsics = Eigen::Matrix<double,3,3>::Identity();
+        Camera() = default;
+        ~Camera();
+        void setIntrinsicValuesUnR(const std::string& cameraPath, ConfigFile* confFile);
+        void setIntrinsicValuesR(const std::string& cameraPath, ConfigFile* confFile);
+};
 
+/**
+ * @brief Zed Camera class that contains 2 cameras and IMU
+ * 
+ */
 
-    const std::shared_ptr<ConfigFile> mConfigFile;
-    std::shared_ptr<Camera> mCameraLeft;
-    std::shared_ptr<Camera> mCameraRight;
-    CameraPose mCameraPose;
-
-
-    Eigen::Matrix<double,4,4> extrinsics = Eigen::Matrix<double,4,4>::Identity();
-    Eigen::Matrix<double,4,4> TCamToCam = Eigen::Matrix<double,4,4>::Identity();
-    Eigen::Matrix<double,4,4> TCamToCamInv = Eigen::Matrix<double,4,4>::Identity();
-
-    void setCameraValues(const std::string& camPath);
+class Zed_Camera
+{
+    private:
     
     public:
-    StereoCamera(const std::shared_ptr<ConfigFile> configFile, std::shared_ptr<Camera> cameraLeft, std::shared_ptr<Camera> cameraRight);
-    StereoCamera() {}
+        bool addKeyFrame {false};
+        bool rectified {};
+        float mBaseline, mFps;
+        int mWidth, mHeight;
+        size_t numOfFrames {};
 
-  };
+        Camera cameraLeft;
+        Camera cameraRight;
+        CameraPose cameraPose;
 
-} // namespace TII
+        ConfigFile* confFile;
+        Eigen::Matrix<double,4,4> extrinsics = Eigen::Matrix<double,4,4>::Identity();
+        Eigen::Matrix<double,4,4> TCamToCam = Eigen::Matrix<double,4,4>::Identity();
+        Eigen::Matrix<double,4,4> TCamToCamInv = Eigen::Matrix<double,4,4>::Identity();
+        Zed_Camera(ConfigFile* yamlFile);
+        Zed_Camera(ConfigFile* yamlFile, bool backCamera);
+        ~Zed_Camera();
+        void setBackCameraT(const bool backCamera);
+        void setCameraValues(const std::string& camPath);
+
+};
 
 
-#endif // CAMERA_H
+}
+
+#endif // TII

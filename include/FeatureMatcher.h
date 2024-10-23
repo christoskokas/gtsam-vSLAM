@@ -12,7 +12,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <opencv2/video/tracking.hpp>
 
-namespace DC_VSLAM
+namespace TII
 {
 
 class Map;
@@ -60,6 +60,6 @@ class FeatureMatcher
 
 };
 
-} // namespace DC_VSLAM
+} // namespace TII
 
 #endif // FEATUREMATCHER_H
