@@ -53,9 +53,9 @@ namespace TII
     cv::Mat R = cv::Mat::eye(3,3,CV_64F);
     cv::Mat P = cv::Mat::eye(3,4,CV_64F);
 
+    double fx {},fy {},cx {}, cy {};
     private:
     bool rectified {};
-    double fx {},fy {},cx {}, cy {};
     double k1 {}, k2 {}, p1 {}, p2 {}, k3{};
     Eigen::Matrix<double,3,3> intrinsics = Eigen::Matrix<double,3,3>::Identity();
     

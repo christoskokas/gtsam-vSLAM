@@ -382,7 +382,7 @@ void FeatureMatcher::findStereoMatchesORB2R(const cv::Mat& lImage, const cv::Mat
     int matchesCount {0};
 
     const float minD = 0;
-    const float maxD = zedptr->cameraLeft.fx;
+    const float maxD = zedptr->mCameraLeft->fx;
 
     const int windowRadius {5};
 
@@ -490,9 +490,9 @@ void FeatureMatcher::findStereoMatchesORB2R(const cv::Mat& lImage, const cv::Mat
 
 
         const float disparity {it->pt.x - newuR};
-        if (disparity > 0.0f && disparity < zedptr->cameraLeft.fx)
+        if (disparity > 0.0f && disparity < zedptr->mCameraLeft->fx)
         {
-            const float depth {((float)zedptr->cameraLeft.fx * zedptr->mBaseline)/disparity};
+            const float depth {((float)zedptr->mCameraLeft->fx * zedptr->mBaseline)/disparity};
             keysLeft.rightIdxs[leftRow] = bestIdx;
             keysLeft.leftIdxs[bestIdx] = leftRow;
             keysLeft.estimatedDepth[leftRow] = depth;
