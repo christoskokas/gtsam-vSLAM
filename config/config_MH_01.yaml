@@ -11,9 +11,9 @@ leftPathCam : "/cam0/image_raw"
 rightPathCam : "/cam1/image_raw"
 
 # path to image folder ( if not real-time )
-imagesPath: "/home/christos/catkin_ws/src/mini_project_kokas/src/vio_slam/images/V1_02/"
+imagesPath: "/home/christos/Downloads/MH_01_easy/mav0/"
 
-ImageFileNamePath: "/home/christos/Downloads/MH_01_easy/mav0/cam1/"
+ImageFileNamePath: "/home/christos/Downloads/MH_01_easy/mav0/cam0/"
 
 IMU:
   Path: "/home/christos/Downloads/MH_01_easy/mav0/imu0/"

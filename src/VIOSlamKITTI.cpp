@@ -95,9 +95,8 @@ bool getImageTimestamps(std::vector<std::string>& fileNameVec, std::vector<doubl
         timestamp = stod(token);
 
         getline(ss, token, ',');
-        std::string fileName = token;
-        if (fileName.back() == '\r')
-            fileName.erase(fileName.size() - 1);
+        const std::string fileName = token;
+        
         // Add the data to the vectors
         timestampsVec.push_back(timestamp);
         fileNameVec.push_back(fileName);
@@ -125,12 +124,16 @@ int main(int argc, char **argv)
 
     slamSystem->GetStereoCamera(StereoCam);
 
-    // const size_t nFrames {StereoCam->numOfFrames};
+    const size_t nFrames {StereoCam->numOfFrames};
+    std::vector<std::string>leftImagesStr, rightImagesStr;
+    leftImagesStr.reserve(nFrames);
+    rightImagesStr.reserve(nFrames);
 
     const std::string imagesPath = confFile->getValue<std::string>("imagesPath");
 
-    const std::string leftPath = imagesPath + "cam0/data/";
-    const std::string rightPath = imagesPath + "cam1/data/";
+    const std::string leftPath = imagesPath + "left/";
+    const std::string rightPath = imagesPath + "right/";
+    const std::string fileExt = confFile->getValue<std::string>("fileExtension");
 
     const std::string IMUDataPath = confFile->getValue<std::string>("IMU","Path");
     const int IMUHz = confFile->getValue<int>("IMU","Hz");
@@ -151,52 +154,14 @@ int main(int argc, char **argv)
 
     bool imageTimestampsValid = getImageTimestamps(ImageFileNamesVec, imageTimestamps, ImageFileNamePath + "data.csv");
 
-    const size_t numberFrames {ImageFileNamesVec.size()};
-    std::vector<std::string>leftImagesStr, rightImagesStr;
-    leftImagesStr.reserve(numberFrames);
-    rightImagesStr.reserve(numberFrames);
-    for ( const auto& imageName : ImageFileNamesVec)
+    const size_t imageNumbLength = 6;
+
+    for ( size_t i {0}; i < nFrames; i++)
     {
-        leftImagesStr.emplace_back(leftPath + imageName);
-        rightImagesStr.emplace_back(rightPath + imageName);
-    }
-
-    // Get all the IMU Data between each new frame for pre Integration
-    auto IMUDataPerFrame = std::vector<TII::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk});
-    if (IMUDataValid && imageTimestampsValid)
-    {
-        const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};
-        const size_t IMUDataPerFrameSize {IMUHz / StereoCam->mFps + 1};
-        int frameNumb {0};
-        double frameTimestamp {imageTimestamps[frameNumb]};
-        double nextFrameTimestamp {imageTimestamps[frameNumb + 1]};
-
-        IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
-        IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
-        IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
-        for (size_t i = 0; i < IMUDataSize; ++i)
-        {
-            const auto& IMUTimestamp = allIMUData.mTimestamps[i];
-            if (IMUTimestamp > frameTimestamp && IMUTimestamp > nextFrameTimestamp)
-            {
-                frameNumb ++;
-                frameTimestamp = imageTimestamps[frameNumb];
-                nextFrameTimestamp = imageTimestamps[frameNumb + 1];
-                IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
-                IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
-                IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
-            }
-            auto& IMUFrame = IMUDataPerFrame[frameNumb];
-            if (IMUTimestamp > frameTimestamp && IMUTimestamp < nextFrameTimestamp)
-            {
-                const auto& angleVel = allIMUData.mAngleVelocity[i];
-                const auto& accel = allIMUData.mAcceleration[i];
-                IMUFrame.mAngleVelocity.emplace_back(angleVel);
-                IMUFrame.mAcceleration.emplace_back(accel);
-                IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
-            }
-        }
-
+        std::string frameNumb = std::to_string(i);
+        std::string frameStr = std::string(imageNumbLength - std::min(imageNumbLength, frameNumb.length()), '0') + frameNumb;
+        leftImagesStr.emplace_back(leftPath + frameStr + fileExt);
+        rightImagesStr.emplace_back(rightPath + frameStr + fileExt);
     }
 
     cv::Mat rectMap[2][2];
@@ -210,9 +175,9 @@ int main(int argc, char **argv)
         cv::initUndistortRectifyMap(StereoCam->mCameraRight->K, StereoCam->mCameraRight->D, StereoCam->mCameraRight->R, StereoCam->mCameraRight->P.rowRange(0,3).colRange(0,3), cv::Size(width, height), CV_32F, rectMap[1][0], rectMap[1][1]);
     }
 
-    // double timeBetFrames = 1.0/StereoCam->mFps;
+    double timeBetFrames = 1.0/StereoCam->mFps;
 
-    for ( size_t frameNumb{0}; frameNumb < numberFrames; frameNumb++)
+    for ( size_t frameNumb{0}; frameNumb < nFrames; frameNumb++)
     {
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -232,17 +197,14 @@ int main(int argc, char **argv)
             imRRect = imageRight.clone();
         }
 
-        if (IMUDataValid)
-            slamSystem->TrackStereoIMU(imLRect, imRRect, frameNumb, IMUDataPerFrame[frameNumb]);
-        else
-            slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
+        slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
 
 
         auto end = std::chrono::high_resolution_clock::now();
-        // double duration = std::chrono::duration_cast<std::chrono::duration<double> >(end - start).count();
+        double duration = std::chrono::duration_cast<std::chrono::duration<double> >(end - start).count();
 
-        // if ( duration < timeBetFrames )
-        //     usleep((timeBetFrames-duration)*1e6);
+        if ( duration < timeBetFrames )
+            usleep((timeBetFrames-duration)*1e6);
 
         if ( flag == 1 )
             break;

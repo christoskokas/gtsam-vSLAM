@@ -20,10 +20,10 @@ VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode 
 
 
   
-  mFeatureTracker = std::shared_ptr<FeatureTracker>();
+  // mFeatureTracker = std::shared_ptr<FeatureTracker>();
   mFeatureTrackingThread = {};
   mOptimizerThread = {};
-  mVisualizer = std::make_shared<Visualizer>();
+  mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
   mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
 }
 
@@ -53,10 +53,10 @@ void VSlamSystem::GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera)
 
 void VSlamSystem::StartSystem()
 {
-  if (mMode == SlamMode::MONOCULAR)
-    TrackMonoCular();
-  else
-    TrackStereo();
+  // if (mMode == SlamMode::MONOCULAR)
+  //   TrackMonoCular();
+  // else
+  //   TrackStereo();
     
 }
 
@@ -72,9 +72,14 @@ void VSlamSystem::TrackMonoCular()
 
 }
 
-void VSlamSystem::TrackStereo()
+void VSlamSystem::TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb)
 {
-  
+  mFeatureTracker->TrackImageT(imLRect, imRRect, frameNumb);
+}
+
+void VSlamSystem::TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUDataVal)
+{
+  mFeatureTracker->TrackImageT(imLRect, imRRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
 }
 
 void VSlamSystem::SaveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition)

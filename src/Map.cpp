@@ -41,25 +41,6 @@ void MapPoint::addConnection(KeyFrame* kF, const std::pair<int,int>& keyPos)
     }
 }
 
-void MapPoint::addConnectionB(KeyFrame* kF, const std::pair<int,int>& keyPos)
-{
-    if ( kFMatchesB.find(kF) == kFMatchesB.end() )
-        kFMatchesB.insert(std::pair<KeyFrame*, std::pair<int,int>>(kF, keyPos));
-    else
-        kFMatchesB[kF] = keyPos;
-
-    if ( keyPos.first >= 0 )
-    {
-        kF->localMapPointsB[keyPos.first] = this;
-        kF->unMatchedFB[keyPos.first] = kdx;
-    }
-    if ( keyPos.second >= 0 )
-    {
-        kF->localMapPointsRB[keyPos.second] = this;
-        kF->unMatchedFRB[keyPos.second] = kdx;
-    }
-}
-
 void MapPoint::update(KeyFrame* kF)
 {
     lastObsKF = kF;
@@ -106,12 +87,12 @@ void MapPoint::update(KeyFrame* kF)
 void MapPoint::update(KeyFrame* kF, const bool back)
 {
     lastObsKF = kF;
-    const TrackedKeys& keysLeft = (back) ? kF->keysB : kF->keys;
+    const TrackedKeys& keysLeft = kF->keys;
     Eigen::Vector3d pos = wp3d;
-    const Eigen::Vector3d camPose = (back) ? kF->backPose.block<3,1>(0,3) : kF->pose.pose.block<3,1>(0,3);
+    const Eigen::Vector3d camPose = kF->pose.pose.block<3,1>(0,3);
     pos = pos - camPose;
     const float dist = pos.norm();
-    const std::pair<int, int>& idxs = (back) ? kFMatchesB[kF] : kFMatches[kF];
+    const std::pair<int, int>& idxs = kFMatches[kF];
     int level {0};
     lastObsKF = kF;
     if ( idxs.second >= 0 )
@@ -243,22 +224,6 @@ void MapPoint::updatePos(const Eigen::Vector3d& newPos, const StereoCamera* zedP
         if ( tKeys.estimatedDepth[keyPos.first] <= 0 )
             continue;
         Eigen::Vector4d pCam = kFcand->pose.getInvPose() * wp;
-        tKeys.estimatedDepth[keyPos.first] = pCam(2);
-        if ( pCam(2) <= zedPtr->mBaseline * 40)
-        {
-            tKeys.close[keyPos.first] = true;
-        }
-    }
-
-    std::unordered_map<KeyFrame*, std::pair<int,int>>::const_iterator endB(kFMatchesB.end());
-    for ( it = kFMatchesB.begin(); it != endB; it++)
-    {
-        KeyFrame* kFcand = it->first;
-        const std::pair<int,int> keyPos = it->second;
-        TrackedKeys& tKeys = kFcand->keysB;
-        if ( tKeys.estimatedDepth[keyPos.first] <= 0 )
-            continue;
-        Eigen::Vector4d pCam = kFcand->backPoseInv * wp;
         tKeys.estimatedDepth[keyPos.first] = pCam(2);
         if ( pCam(2) <= zedPtr->mBaseline * 40)
         {

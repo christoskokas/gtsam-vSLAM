@@ -58,7 +58,12 @@ void StereoCamera::setCameraValues(const std::string& camPath)
   extrinsics(0,3) = (double)mBaseline;
 }
 
-Camera::Camera(const std::shared_ptr<ConfigFile> configFile, const std::string& camPath) : mConfigFile(configFile)
+IMUData::IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk) : mGyroNoiseDensity(gyroNoiseDensity), mGyroRandomWalk(gyroRandomWalk), mAccelNoiseDensity(accelNoiseDensity), mAccelRandomWalk(accelRandomWalk)
+{
+
+}
+
+Camera::Camera(const std::shared_ptr<ConfigFile> configFile, const std::string& camPath) : mConfigFile(configFile), mIMUData(nullptr)
 {
   rectified = configFile->getValue<bool>("rectified");
   if (rectified)

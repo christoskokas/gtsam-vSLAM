@@ -1,4 +1,17 @@
 #include "FeatureTracker.h"
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/slam/ProjectionFactor.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/NonlinearEquality.h>
+#include <gtsam/navigation/ImuFactor.h>
+#include <gtsam/navigation/PreintegrationParams.h>
+#include <gtsam/navigation/ImuBias.h>
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/inference/Symbol.h>
+
 
 namespace TII
 {
@@ -38,8 +51,8 @@ void FeatureTracker::assignKeysToGrids(TrackedKeys& keysLeft, std::vector<cv::Ke
 
 void FeatureTracker::extractORBStereoMatchR(cv::Mat& leftIm, cv::Mat& rightIm, TrackedKeys& keysLeft)
 {
-    std::thread extractLeft(&FeatureExtractor::extractKeysNew, std::ref(feLeft), std::ref(leftIm), std::ref(keysLeft.keyPoints), std::ref(keysLeft.Desc));
-    std::thread extractRight(&FeatureExtractor::extractKeysNew, std::ref(feRight), std::ref(rightIm), std::ref(keysLeft.rightKeyPoints),std::ref(keysLeft.rightDesc));
+    std::thread extractLeft(&FeatureExtractor::extractKeysNew, feLeft, std::ref(leftIm), std::ref(keysLeft.keyPoints), std::ref(keysLeft.Desc));
+    std::thread extractRight(&FeatureExtractor::extractKeysNew, feRight, std::ref(rightIm), std::ref(keysLeft.rightKeyPoints),std::ref(keysLeft.rightDesc));
     extractLeft.join();
     extractRight.join();
 
@@ -125,7 +138,182 @@ bool FeatureTracker::check2dError(Eigen::Vector4d& p4d, const cv::Point2f& obs, 
 
 std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &activeMapPoints, TrackedKeys &keysLeft, std::vector<std::pair<int, int>> &matchesIdxs, Eigen::Matrix4d &estimPose, std::vector<bool> &MPsOutliers, const bool first)
 {
-    return std::pair<int, int>();
+    // const Eigen::Matrix4d estimPoseRInv = zedPtr->extrinsics.inverse();
+
+    const size_t prevS { activeMapPoints.size() };
+    const Eigen::Matrix3d& K_eigen = zedPtr->mCameraLeft->intrinsics;
+
+    // Convert Eigen intrinsics to GTSAM intrinsics
+    auto K = boost::make_shared<gtsam::Cal3_S2>(
+        K_eigen(0, 0), K_eigen(1, 1), 0, K_eigen(0, 2), K_eigen(1, 2));
+
+    // Initializing GTSAM graph and initial values
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initialEstimate;
+    Eigen::Matrix4d estimPoseInv = estimPose.inverse();
+
+    gtsam::Pose3 gtsamPose(
+        gtsam::Rot3(estimPoseInv.block<3, 3>(0, 0)),
+        gtsam::Point3(estimPoseInv.block<3, 1>(0, 3))
+    );
+
+    gtsam::Pose3 gtsamExtrinsics(
+        gtsam::Rot3(zedPtr->extrinsics.block<3, 3>(0, 0)),
+        gtsam::Point3(zedPtr->extrinsics.block<3, 1>(0, 3))
+    );
+
+    // Add initial guess to the graph
+    initialEstimate.insert(gtsam::Symbol('x', 0), gtsamPose);
+
+    // Loop through matched points and add projection factors
+    for (size_t i{0}; i < matchesIdxs.size(); i++) {
+        if (MPsOutliers[i]) 
+            continue;
+        const std::pair<int, int>& keyPos = matchesIdxs[i];
+
+        MapPoint* mp = activeMapPoints[i];
+        if (mp->GetIsOutlier()) 
+            continue;
+
+        Eigen::Vector3d point = mp->getWordPose3d();
+        gtsam::Point3 gtsamPoint(point);
+
+        if (keyPos.first >= 0) 
+        { // Left image point
+            const int nIdx = keyPos.first;
+            if (!mp->inFrame)
+                continue;
+            Eigen::Vector2d obs(keysLeft.keyPoints[nIdx].pt.x, keysLeft.keyPoints[nIdx].pt.y);
+            gtsam::Point2 observation(obs);
+
+            auto factor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
+                observation, gtsam::noiseModel::Isotropic::Sigma(2, 1.0), gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K);
+
+            graph.add(factor);
+
+            // Add landmark initial estimate
+            initialEstimate.insert(gtsam::Symbol('l', i), gtsamPoint);
+            // Motion Only BA
+            graph.add(gtsam::NonlinearEquality<gtsam::Point3>(gtsam::Symbol('l', i), gtsamPoint));
+            if (keysLeft.close[nIdx])
+            {
+                Eigen::Vector4d depthCheck = estimPose * mp->getWordPose4d();
+                if ( depthCheck(2) >= zedPtr->mBaseline * fm.closeNumber )
+                {
+                    if ( keyPos.second >= 0 )
+                    {
+                        const int rIdx = keyPos.second;
+                        if (!mp->inFrameR) 
+                            continue;
+                        
+                        Eigen::Vector2d obsR(keysLeft.rightKeyPoints[rIdx].pt.x, keysLeft.rightKeyPoints[rIdx].pt.y);
+                        gtsam::Point2 observationR(obsR);
+
+                        // Adding projection factor for the right image (stereo)
+                        auto factorR = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
+                            observationR, gtsam::noiseModel::Isotropic::Sigma(2, 1.0), gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
+
+                        graph.add(factorR);
+                        continue;
+                    }
+
+                }
+                
+            }
+            
+        }
+        else if (keyPos.second >= 0) { // Right image point
+            const int rIdx = keyPos.second;
+            if (!mp->inFrameR) 
+                continue;
+            
+            Eigen::Vector2d obsR(keysLeft.rightKeyPoints[rIdx].pt.x, keysLeft.rightKeyPoints[rIdx].pt.y);
+            gtsam::Point2 observationR(obsR);
+
+            // Adding projection factor for the right image (stereo)
+            auto factorR = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
+                observationR, gtsam::noiseModel::Isotropic::Sigma(2, 1.0), gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
+
+            graph.add(factorR);
+
+            // Optionally, add initial estimate if not already inserted
+            if (!initialEstimate.exists(gtsam::Symbol('l', i))) 
+            {
+                initialEstimate.insert(gtsam::Symbol('l', i), gtsamPoint);
+                graph.add(gtsam::NonlinearEquality<gtsam::Point3>(gtsam::Symbol('l', i), gtsamPoint));
+            }
+        }
+        else
+            continue;
+    }
+
+    // // IMU Preintegration 
+    // // Initialize IMU preintegration parameters
+    // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81);  // Gravity along Z axis (m/s^2)
+    // preintegrationParams->accelerometerCovariance = gtsam::I_3x3 * 0.0001;
+    // preintegrationParams->gyroscopeCovariance = gtsam::I_3x3 * 0.0001;
+    // preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
+
+    // // Assume zero bias initially
+    // gtsam::imuBias::ConstantBias initialBias; 
+
+    // // Initialize the preintegrated IMU measurements
+    // gtsam::PreintegratedImuMeasurements preintegratedImu(preintegrationParams, initialBias);
+
+    // // Load and integrate IMU data from EuRoC dataset
+    // std::ifstream imuData(imuDataPath);
+    // if (!imuData.is_open()) {
+    //     std::cerr << "Error opening IMU data file" << std::endl;
+    //     return std::make_pair(0, 0);
+    // }
+
+    // double timestamp, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z;
+    // while (imuData >> timestamp >> accel_x >> accel_y >> accel_z >> gyro_x >> gyro_y >> gyro_z) {
+    //     if (timestamp >= step_0 && timestamp <= step_1) {
+    //         gtsam::Vector3 accel(accel_x, accel_y, accel_z);
+    //         gtsam::Vector3 gyro(gyro_x, gyro_y, gyro_z);
+
+    //         // Integrate the IMU measurements
+    //         double deltaT = (step_1 - step_0) / 1e9;  // Time between IMU readings in seconds
+    //         preintegratedImu.integrateMeasurement(accel, gyro, deltaT);
+    //     }
+    // }
+
+    // // Insert initial velocity and bias (assumed zero for now)
+    // initialEstimate.insert(gtsam::Symbol('v', 0), gtsam::Vector3(0, 0, 0));
+    // initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
+
+    // // Add IMU factor to the graph between pose_0 and pose_1
+    // gtsam::Pose3 pose_1 = initialPose;  // We need to estimate the pose at step_1
+    // graph.add(gtsam::ImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
+    //                            gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
+    //                            gtsam::Symbol('b', 0), preintegratedImu));
+
+    // // Add bias factor to the graph
+    // auto biasNoise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3); // Small noise model for bias
+    // graph.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(
+    //     gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
+
+    // // Insert pose and velocity estimates at step_1 (initial guess)
+    // initialEstimate.insert(gtsam::Symbol('x', 1), pose_1);  // Next pose (to be optimized)
+    // initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
+
+    // Optimize the pose using Levenberg-Marquardt
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = 100;
+    gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, params);
+    gtsam::Values result = optimizer.optimize();
+
+    // Extract optimized pose
+    gtsam::Pose3 optimizedPose = result.at<gtsam::Pose3>(gtsam::Symbol('x', 0));
+
+    estimPoseInv.block<3, 3>(0, 0) = optimizedPose.rotation().matrix();
+    estimPoseInv.block<3, 1>(0, 3) = optimizedPose.translation();
+    estimPose = estimPoseInv.inverse();
+    int nIn = 0, nStereo = 0;
+    nStereo = findOutliersR(estimPose, activeMapPoints, keysLeft, matchesIdxs, 7.815, MPsOutliers, std::vector<float>(prevS, 1.0f), nIn);
+
+    return std::pair<int, int>(nIn, nStereo);
 }
 
 int FeatureTracker::findOutliersR(const Eigen::Matrix4d &estimPose, std::vector<MapPoint *> &activeMapPoints, TrackedKeys &keysLeft, std::vector<std::pair<int, int>> &matchesIdxs, const double thres, std::vector<bool> &MPsOutliers, const std::vector<float> &weights, int &nInliers)
@@ -197,119 +385,6 @@ int FeatureTracker::findOutliersR(const Eigen::Matrix4d &estimPose, std::vector<
     return nStereo;
 }
 
-// std::pair<int,int> FeatureTracker::estimatePoseCeresR(std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, const bool first)
-// {
-
-//     const Eigen::Matrix4d estimPoseRInv = zedPtr->extrinsics.inverse();
-//     const Eigen::Matrix3d qc1c2 = estimPoseRInv.block<3,3>(0,0);
-//     const Eigen::Matrix<double,3,1> tc1c2 = estimPoseRInv.block<3,1>(0,3);
-
-//     const size_t prevS { activeMapPoints.size()};
-
-//     const Eigen::Matrix3d& K = zedPtr->mCameraLeft->intrinsics;
-
-//     std::vector<float> weights;
-//     weights.resize(prevS, 1.0f);
-//     double thresh = 7.815f;
-
-//     size_t maxIter {2};
-//     int nIn {0}, nStereo {0};
-//     for (size_t iter {0}; iter < maxIter; iter ++ )
-//     {
-//         ceres::Problem problem;
-//         Eigen::Vector3d frame_tcw;
-//         Eigen::Quaterniond frame_qcw;
-//         Eigen::Matrix4d frame_pose = estimPose;
-//         Eigen::Matrix3d frame_R;
-//         frame_R = frame_pose.block<3, 3>(0, 0);
-//         frame_tcw = frame_pose.block<3, 1>(0, 3);
-//         frame_qcw = Eigen::Quaterniond(frame_R);
-//         ceres::Manifold* quaternion_local_parameterization = new ceres::EigenQuaternionManifold;
-//         ceres::LossFunction* loss_function = new ceres::HuberLoss(sqrt(7.815f));
-//         for (size_t i{0}, end{matchesIdxs.size()}; i < end; i++)
-//         {
-//             if ( MPsOutliers[i] )
-//                 continue;
-//             const std::pair<int,int>& keyPos = matchesIdxs[i];
-
-//             MapPoint* mp = activeMapPoints[i];
-//             if ( mp->GetIsOutlier() )
-//                 continue;
-//             ceres::CostFunction* costf;
-//             if ( keyPos.first >= 0 )
-//             {
-//                 if  ( !mp->inFrame )
-//                     continue;
-//                 const int nIdx {keyPos.first};
-//                 if (  keysLeft.close[nIdx] )
-//                 {
-//                     Eigen::Vector2d obs((double)keysLeft.keyPoints[nIdx].pt.x, (double)keysLeft.keyPoints[nIdx].pt.y);
-//                     Eigen::Vector3d point = mp->getWordPose3d();
-//                     const int octL = keysLeft.keyPoints[nIdx].octave;
-//                     double weight = (double)feLeft->InvSigmaFactor[octL];
-//                     costf = OptimizePose::Create(K, point, obs, weight);
-//                     problem.AddResidualBlock(costf, loss_function /* squared loss */,frame_tcw.data(), frame_qcw.coeffs().data());
-
-//                     problem.SetManifold(frame_qcw.coeffs().data(),
-//                                         quaternion_local_parameterization);
-//                     Eigen::Vector4d depthCheck = estimPose * mp->getWordPose4d();
-//                     if ( depthCheck(2) < zedPtr->mBaseline * fm.closeNumber )
-//                         continue;
-//                     if ( keyPos.second < 0 )
-//                         continue;
-//                     const int rIdx {keyPos.second};
-//                     Eigen::Vector2d obsr((double)keysLeft.rightKeyPoints[rIdx].pt.x, (double)keysLeft.rightKeyPoints[rIdx].pt.y);
-//                     Eigen::Vector3d pointr = mp->getWordPose3d();
-//                     const int octR = keysLeft.rightKeyPoints[rIdx].octave;
-//                     weight = (double)feLeft->InvSigmaFactor[octR];
-//                     costf = OptimizePoseR::Create(K,tc1c2, qc1c2, pointr, obsr, weight);
-//                     problem.AddResidualBlock(costf, loss_function /* squared loss */,frame_tcw.data(), frame_qcw.coeffs().data());
-
-//                     problem.SetManifold(frame_qcw.coeffs().data(),
-//                                         quaternion_local_parameterization);
-//                     continue;
-//                 }
-//                 else
-//                 {
-//                     Eigen::Vector2d obs((double)keysLeft.keyPoints[nIdx].pt.x, (double)keysLeft.keyPoints[nIdx].pt.y);
-//                     Eigen::Vector3d point = mp->getWordPose3d();
-//                     const int octL = keysLeft.keyPoints[nIdx].octave;
-//                     const double weight = (double)feLeft->InvSigmaFactor[octL];
-//                     costf = OptimizePose::Create(K, point, obs, weight);
-//                 }
-//             }
-//             else if ( keyPos.second >= 0)
-//             {
-//                 if  ( !mp->inFrameR )
-//                     continue;
-//                 const int nIdx {keyPos.second};
-//                 Eigen::Vector2d obs((double)keysLeft.rightKeyPoints[nIdx].pt.x, (double)keysLeft.rightKeyPoints[nIdx].pt.y);
-//                 Eigen::Vector3d point = mp->getWordPose3d();
-//                 const int octR = keysLeft.rightKeyPoints[nIdx].octave;
-//                 const double weight = (double)feLeft->InvSigmaFactor[octR];
-//                 costf = OptimizePoseR::Create(K,tc1c2, qc1c2, point, obs, weight);
-//             }
-//             else
-//                 continue;
-//             problem.AddResidualBlock(costf, loss_function /* squared loss */,frame_tcw.data(), frame_qcw.coeffs().data());
-
-//             problem.SetManifold(frame_qcw.coeffs().data(),
-//                                         quaternion_local_parameterization);
-//         }
-//         ceres::Solver::Options options;
-//         options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
-//         options.max_num_iterations = 100;
-//         ceres::Solver::Summary summary;
-//         ceres::Solve(options, &problem, &summary);
-//         Eigen::Matrix3d R = frame_qcw.normalized().toRotationMatrix();
-//         estimPose.block<3, 3>(0, 0) = R;
-//         estimPose.block<3, 1>(0, 3) = frame_tcw;
-//         nIn = 0;
-//         nStereo = 0;
-//         nStereo = findOutliersR(estimPose, activeMapPoints, keysLeft, matchesIdxs, thresh, MPsOutliers, weights, nIn);
-//     }
-//     return std::pair<int,int>(nIn, nStereo);
-// }
 
 bool FeatureTracker::worldToFrameRTrack(MapPoint* mp, const bool right, const Eigen::Matrix4d& predPoseInv, const Eigen::Matrix4d& tempPose)
 {
@@ -612,7 +687,7 @@ void FeatureTracker::setActiveOutliers(std::vector<MapPoint*>& activeMPs, std::v
     }
 }
 
-void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb)
+void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr /* = nullptr*/)
 {
     curFrame = frameNumb;
     curFrameNumb++;
@@ -662,7 +737,7 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
 
         return;
     }
-    std::vector<TII::MapPoint *> activeMpsTemp;
+    std::vector<MapPoint *> activeMpsTemp;
     {
     std::lock_guard<std::mutex> lock(map->mapMutex);
     removeOutOfFrameMPsR(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);

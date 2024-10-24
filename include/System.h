@@ -27,7 +27,8 @@ namespace TII
       void GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera);
       void StartSystem();
       void TrackMonoCular();
-      void TrackStereo();
+      void TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb);
+      void TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUData);
       void ExitSystem();
       void SaveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition);
     private:

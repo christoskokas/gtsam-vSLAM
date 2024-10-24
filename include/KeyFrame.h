@@ -23,16 +23,11 @@ class KeyFrame
         double fxb,fyb,cxb,cyb;
         CameraPose pose;
         Eigen::Matrix4d extr;
-        Eigen::Matrix4d extrB;
         Eigen::Matrix4d TCamToCam;
-        Eigen::Matrix4d backPose;
-        Eigen::Matrix4d backPoseInv;
         cv::Mat leftIm, rightIm;
         cv::Mat rLeftIm;
         std::vector<int> unMatchedF;
         std::vector<int> unMatchedFR;
-        std::vector<int> unMatchedFB;
-        std::vector<int> unMatchedFRB;
         std::vector<float> scaleFactor;
         std::vector < float > sigmaFactor;
         std::vector < float > InvSigmaFactor;
@@ -46,6 +41,9 @@ class KeyFrame
 
         bool LCCand {false};
 
+        std::shared_ptr<IMUData> mIMUData;
+
+
         TrackedKeys keys, keysB;
         Eigen::MatrixXd homoPoints3D;
         const unsigned long numb;
@@ -54,24 +52,18 @@ class KeyFrame
         bool visualize {true};
         std::vector<MapPoint*> localMapPoints;
         std::vector<MapPoint*> localMapPointsR;
-        std::vector<MapPoint*> localMapPointsB;
-        std::vector<MapPoint*> localMapPointsRB;
         KeyFrame* prevKF = nullptr;
         KeyFrame* nextKF = nullptr;
         bool active {true};
         bool keyF {false};
         bool LBA {false};
         bool fixed {false};
-        bool backCam {false};
 
         void updatePose(const Eigen::Matrix4d& keyPose);
 
-        // Create Function that updates connections
         void calcConnections();
 
-        // Create Function that updates connections
 
-        void setBackPose(const Eigen::Matrix4d& _backPose);
         void eraseMPConnection(const int mpPos);
         void eraseMPConnection(const std::pair<int,int>& mpPos);
         void eraseMPConnectionR(const int mpPos);
