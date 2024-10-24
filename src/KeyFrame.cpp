@@ -75,7 +75,7 @@ void KeyFrame::updatePose(const Eigen::Matrix4d& keyPose)
     pose.changePose(keyPose);
 }
 
-void KeyFrame::getConnectedKFsLC(const Map* map, std::vector<KeyFrame*>& activeKF)
+void KeyFrame::getConnectedKFsLC(std::shared_ptr<Map> map, std::vector<KeyFrame*>& activeKF)
 {
     for ( int32_t i{map->LCCandIdx - 1}; i >= 0; i--)
     {

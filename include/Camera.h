@@ -42,10 +42,12 @@ namespace TII
 
   struct IMUData
   {
-    IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk);
+    IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk, int hz);
     const double mGyroNoiseDensity, mGyroRandomWalk, mAccelNoiseDensity, mAccelRandomWalk;
+    const int mHz;
     std::vector<Eigen::Vector3d> mAngleVelocity, mAcceleration;
     std::vector<double> mTimestamps;
+
 
   };
 

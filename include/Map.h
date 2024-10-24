@@ -77,7 +77,7 @@ class MapPoint
 
         Eigen::Vector4d getWordPose4d() const;
         Eigen::Vector3d getWordPose3d() const;
-        void updatePos(const Eigen::Vector3d& newPos, const StereoCamera* zedPtr);
+        void updatePos(const Eigen::Vector3d& newPos, const std::shared_ptr<StereoCamera> zedPtr);
         void setWordPose4d(const Eigen::Vector4d& p);
         void setWordPose3d(const Eigen::Vector3d& p);
 };

@@ -29,8 +29,6 @@ class FeatureTracker
 {
     private :
 
-        std::vector<KeyFrame> keyframes;
-
 
         KeyFrame* latestKF = nullptr;
         Eigen::Matrix4d lastKFPoseInv = Eigen::Matrix4d::Identity();
@@ -65,6 +63,7 @@ class FeatureTracker
 
         std::vector<MapPoint*>& activeMapPoints;
         std::vector<KeyFrame*>& allFrames;
+        std::shared_ptr<IMUData> currentIMUData;
 
     public :
 

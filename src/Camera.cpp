@@ -58,7 +58,7 @@ void StereoCamera::setCameraValues(const std::string& camPath)
   extrinsics(0,3) = (double)mBaseline;
 }
 
-IMUData::IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk) : mGyroNoiseDensity(gyroNoiseDensity), mGyroRandomWalk(gyroRandomWalk), mAccelNoiseDensity(accelNoiseDensity), mAccelRandomWalk(accelRandomWalk)
+IMUData::IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk, int hz) : mGyroNoiseDensity(gyroNoiseDensity), mGyroRandomWalk(gyroRandomWalk), mAccelNoiseDensity(accelNoiseDensity), mAccelRandomWalk(accelRandomWalk), mHz(hz)
 {
 
 }

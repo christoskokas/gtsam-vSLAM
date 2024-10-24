@@ -7,6 +7,7 @@
 #include <gtsam/nonlinear/NonlinearEquality.h>
 #include <gtsam/navigation/ImuFactor.h>
 #include <gtsam/navigation/PreintegrationParams.h>
+#include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/navigation/ImuBias.h>
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Cal3_S2.h>
@@ -16,7 +17,7 @@
 namespace TII
 {
 
-FeatureTracker::FeatureTracker(std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, std::shared_ptr<Map> _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fx(_zedPtr->mCameraLeft->fx), fy(_zedPtr->mCameraLeft->fy), cx(_zedPtr->mCameraLeft->cx), cy(_zedPtr->mCameraLeft->cy), activeMapPoints(_map->activeMapPoints), allFrames(_map->allFramesPoses)
+FeatureTracker::FeatureTracker(std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, std::shared_ptr<Map> _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fx(_zedPtr->mCameraLeft->fx), fy(_zedPtr->mCameraLeft->fy), cx(_zedPtr->mCameraLeft->cx), cy(_zedPtr->mCameraLeft->cy), activeMapPoints(_map->activeMapPoints), allFrames(_map->allFramesPoses), currentIMUData(nullptr)
 {
     allFrames.reserve(zedPtr->numOfFrames);
 }
@@ -75,6 +76,7 @@ void FeatureTracker::initializeMapR(TrackedKeys& keysLeft)
     kF->logScale = log(feLeft->imScale);
     kF->keyF = true;
     kF->fixed = true;
+    kF->mIMUData = currentIMUData;
     kF->unMatchedF.resize(keysLeft.keyPoints.size(), -1);
     kF->unMatchedFR.resize(keysLeft.rightKeyPoints.size(), -1);
     kF->localMapPoints.resize(keysLeft.keyPoints.size(), nullptr);
@@ -152,7 +154,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     gtsam::Values initialEstimate;
     Eigen::Matrix4d estimPoseInv = estimPose.inverse();
 
-    gtsam::Pose3 gtsamPose(
+    gtsam::Pose3 initialPose(
         gtsam::Rot3(estimPoseInv.block<3, 3>(0, 0)),
         gtsam::Point3(estimPoseInv.block<3, 1>(0, 3))
     );
@@ -163,10 +165,13 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     );
 
     // Add initial guess to the graph
-    initialEstimate.insert(gtsam::Symbol('x', 0), gtsamPose);
+    initialEstimate.insert(gtsam::Symbol('x', 0), initialPose);
+
+    gtsam::SharedNoiseModel noiseModel = nullptr;
 
     // Loop through matched points and add projection factors
-    for (size_t i{0}; i < matchesIdxs.size(); i++) {
+    for (size_t i{0}; i < matchesIdxs.size(); i++) 
+    {
         if (MPsOutliers[i]) 
             continue;
         const std::pair<int, int>& keyPos = matchesIdxs[i];
@@ -185,9 +190,11 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
                 continue;
             Eigen::Vector2d obs(keysLeft.keyPoints[nIdx].pt.x, keysLeft.keyPoints[nIdx].pt.y);
             gtsam::Point2 observation(obs);
-
+            const int octL = keysLeft.keyPoints[nIdx].octave;
+            double sigma = 1.0/feLeft->InvSigmaFactor[octL];
+            noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
             auto factor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
-                observation, gtsam::noiseModel::Isotropic::Sigma(2, 1.0), gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K);
+                observation, noiseModel, gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K);
 
             graph.add(factor);
 
@@ -210,8 +217,11 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
                         gtsam::Point2 observationR(obsR);
 
                         // Adding projection factor for the right image (stereo)
+                        const int octR = keysLeft.rightKeyPoints[rIdx].octave;
+                        double sigma = 1.0/feLeft->InvSigmaFactor[octR];
+                        noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
                         auto factorR = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
-                            observationR, gtsam::noiseModel::Isotropic::Sigma(2, 1.0), gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
+                            observationR, noiseModel, gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
 
                         graph.add(factorR);
                         continue;
@@ -231,8 +241,11 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
             gtsam::Point2 observationR(obsR);
 
             // Adding projection factor for the right image (stereo)
+            const int octR = keysLeft.rightKeyPoints[rIdx].octave;
+            double sigma = 1.0/feLeft->InvSigmaFactor[octR];
+            noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
             auto factorR = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
-                observationR, gtsam::noiseModel::Isotropic::Sigma(2, 1.0), gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
+                observationR, noiseModel, gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
 
             graph.add(factorR);
 
@@ -247,56 +260,72 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
             continue;
     }
 
-    // // IMU Preintegration 
-    // // Initialize IMU preintegration parameters
-    // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81);  // Gravity along Z axis (m/s^2)
-    // preintegrationParams->accelerometerCovariance = gtsam::I_3x3 * 0.0001;
-    // preintegrationParams->gyroscopeCovariance = gtsam::I_3x3 * 0.0001;
-    // preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
+    // IMU Preintegration 
 
-    // // Assume zero bias initially
-    // gtsam::imuBias::ConstantBias initialBias; 
+    const double gyroNoiseDensity = currentIMUData->mGyroNoiseDensity;
+    double gyroRandomWalk = currentIMUData->mGyroRandomWalk;
+    double accelNoiseDensity = currentIMUData->mAccelNoiseDensity;
+    double accelRandomWalk = currentIMUData->mAccelRandomWalk;
+    
+    // Initialize IMU preintegration parameters
+    // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
+    gtsam::Vector3 gravityVec(0,0,9.81);
+    auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
+    
+    preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
+    preintegrationParams->accelerometerCovariance = gtsam::Matrix33::Identity() * pow(accelNoiseDensity, 2);
 
-    // // Initialize the preintegrated IMU measurements
+    preintegrationParams->biasOmegaCovariance = gtsam::Matrix33::Identity() * pow(gyroRandomWalk, 2);
+    preintegrationParams->biasAccCovariance = gtsam::Matrix33::Identity() * pow(accelRandomWalk, 2);
+
+    preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
+
+    // Assume zero bias initially
+    gtsam::imuBias::ConstantBias initialBias; 
+
+    // Initialize the preintegrated IMU measurements
     // gtsam::PreintegratedImuMeasurements preintegratedImu(preintegrationParams, initialBias);
+    gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
 
-    // // Load and integrate IMU data from EuRoC dataset
-    // std::ifstream imuData(imuDataPath);
-    // if (!imuData.is_open()) {
-    //     std::cerr << "Error opening IMU data file" << std::endl;
-    //     return std::make_pair(0, 0);
-    // }
+    const size_t IMUDataSize{currentIMUData->mTimestamps.size()};
+    double dt {currentIMUData->mHz/zedPtr->mFps};
+    for (size_t i = 0; i < IMUDataSize; ++i)
+    {
+        const auto& acceleration = currentIMUData->mAcceleration[i];
+        const auto& angleVelocity = currentIMUData->mAngleVelocity[i];
+        gtsam::Vector3 accel(acceleration[0], acceleration[1], acceleration[2]);
+        gtsam::Vector3 angleVel(angleVelocity[0], angleVelocity[1], angleVelocity[2]);
 
-    // double timestamp, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z;
-    // while (imuData >> timestamp >> accel_x >> accel_y >> accel_z >> gyro_x >> gyro_y >> gyro_z) {
-    //     if (timestamp >= step_0 && timestamp <= step_1) {
-    //         gtsam::Vector3 accel(accel_x, accel_y, accel_z);
-    //         gtsam::Vector3 gyro(gyro_x, gyro_y, gyro_z);
+        if ((i+1) < IMUDataSize)
+        {
+            const auto& timestamp0 = currentIMUData->mTimestamps[i];
+            const auto& timestamp1 = currentIMUData->mTimestamps[i+1];
+            dt = (timestamp1 - timestamp0) / 1e9;
+        }
 
-    //         // Integrate the IMU measurements
-    //         double deltaT = (step_1 - step_0) / 1e9;  // Time between IMU readings in seconds
-    //         preintegratedImu.integrateMeasurement(accel, gyro, deltaT);
-    //     }
-    // }
+        // Integrate the IMU measurements
+        preintegratedImu.integrateMeasurement(accel, angleVel, dt);
+    }
 
-    // // Insert initial velocity and bias (assumed zero for now)
-    // initialEstimate.insert(gtsam::Symbol('v', 0), gtsam::Vector3(0, 0, 0));
-    // initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
+    // Insert initial velocity and bias (assumed zero for now)
+    initialEstimate.insert(gtsam::Symbol('v', 0), gtsam::Vector3(0, 0, 0));
+    initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
 
-    // // Add IMU factor to the graph between pose_0 and pose_1
-    // gtsam::Pose3 pose_1 = initialPose;  // We need to estimate the pose at step_1
-    // graph.add(gtsam::ImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
-    //                            gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
-    //                            gtsam::Symbol('b', 0), preintegratedImu));
+    // Add IMU factor to the graph between pose_0 and pose_1
+    gtsam::Pose3 pose_1 = initialPose;  // We need to estimate the pose at step_1
+    graph.add(gtsam::CombinedImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
+                               gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
+                               gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), preintegratedImu));
 
-    // // Add bias factor to the graph
-    // auto biasNoise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3); // Small noise model for bias
-    // graph.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(
-    //     gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
+    // Add bias factor to the graph
+    auto biasNoise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3); // Small noise model for bias
+    graph.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(
+        gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
 
-    // // Insert pose and velocity estimates at step_1 (initial guess)
-    // initialEstimate.insert(gtsam::Symbol('x', 1), pose_1);  // Next pose (to be optimized)
-    // initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
+    // Insert pose and velocity estimates at step_1 (initial guess)
+    initialEstimate.insert(gtsam::Symbol('x', 1), pose_1);  // Next pose (to be optimized)
+    initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
+    initialEstimate.insert(gtsam::Symbol('b', 1), initialBias);
 
     // Optimize the pose using Levenberg-Marquardt
     gtsam::LevenbergMarquardtParams params;
@@ -456,6 +485,7 @@ void FeatureTracker::insertKeyFrameR(TrackedKeys& keysLeft, std::vector<int>& ma
     kF->nScaleLev = feLeft->nLevels;
     kF->logScale = log(feLeft->imScale);
     kF->keyF = true;
+    kF->mIMUData = currentIMUData;
     kF->prevKF = latestKF;
     latestKF->nextKF = kF;
     
@@ -559,6 +589,7 @@ void FeatureTracker::addFrame(const Eigen::Matrix4d& estimPose)
     kF->keyF = false;
     kF->active = false;
     kF->visualize = false;
+    kF->mIMUData = currentIMUData;
     allFrames.emplace_back(kF);
     
 }
@@ -689,6 +720,8 @@ void FeatureTracker::setActiveOutliers(std::vector<MapPoint*>& activeMPs, std::v
 
 void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr /* = nullptr*/)
 {
+    if (IMUDataptr)
+        currentIMUData = IMUDataptr;
     curFrame = frameNumb;
     curFrameNumb++;
     
@@ -843,6 +876,8 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
     publishPoseNew();
 
     setActiveOutliers(activeMpsTemp,MPsOutliers, matchesIdxs);
+
+    currentIMUData = nullptr;
 }
 
 void FeatureTracker::drawKeys(const char* com, cv::Mat& im, std::vector<cv::KeyPoint>& keys, std::vector<bool>& close)

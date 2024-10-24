@@ -72,7 +72,7 @@ class KeyFrame
         KeyFrame(const std::shared_ptr<StereoCamera> _zedCam, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         Eigen::Vector4d getWorldPosition(int idx);
         void getConnectedKFs(std::vector<KeyFrame*>& activeKF, const int N);
-        void getConnectedKFsLC(const Map* map, std::vector<KeyFrame*>& activeKF);
+        void getConnectedKFsLC(std::shared_ptr<Map> map, std::vector<KeyFrame*>& activeKF);
 
         Eigen::Matrix4d getPose();
 };

@@ -139,9 +139,9 @@ int main(int argc, char **argv)
     const double IMUAccelNoiseDensity = confFile->getValue<double>("IMU","accelerometer_noise_density");
     const double IMUAccelRandomWalk = confFile->getValue<double>("IMU","accelerometer_random_walk");
 
-    StereoCam->mCameraLeft->mIMUData = std::make_shared<TII::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk);
+    StereoCam->mCameraLeft->mIMUData = std::make_shared<TII::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
 
-    TII::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk);
+    TII::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
 
     bool IMUDataValid = getAllIMUData(allIMUData.mAngleVelocity, allIMUData.mAcceleration, allIMUData.mTimestamps, IMUDataPath + "data.csv");
 
@@ -162,7 +162,7 @@ int main(int argc, char **argv)
     }
 
     // Get all the IMU Data between each new frame for pre Integration
-    auto IMUDataPerFrame = std::vector<TII::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk});
+    auto IMUDataPerFrame = std::vector<TII::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
     if (IMUDataValid && imageTimestampsValid)
     {
         const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};

@@ -15,14 +15,13 @@ VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode 
   else
   {
     InitializeStereo();
+    mLocalMapper = std::make_shared<LocalMapper>(mMap, mStereoCamera, mFeatureMatcher);
   }
-
-
 
   
   // mFeatureTracker = std::shared_ptr<FeatureTracker>();
   mFeatureTrackingThread = {};
-  mOptimizerThread = {};
+  mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);;
   mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
   mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
 }
@@ -31,6 +30,7 @@ void VSlamSystem::InitializeMonocular()
 {
   mMonoCamera = std::make_shared<Camera>(mConfigFile, "Camera_l");
   mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
+  mFeatureMatcher = std::make_shared<FeatureMatcher>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorLeft);
   // mFeatureTracker = std::shared_ptr<FeatureTracker>();
   std::cout << "Monocular Camera Initialized.." << std::endl;
 }
@@ -42,6 +42,7 @@ void VSlamSystem::InitializeStereo()
   mStereoCamera = std::make_shared<StereoCamera>(mConfigFile, cameraLeft, cameraRight);
   mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
   mFeatureExtractorRight = std::make_shared<FeatureExtractor>();
+  mFeatureMatcher = std::make_shared<FeatureMatcher>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight);
   mFeatureTracker = std::make_shared<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
   std::cout << "Stereo Camera Initialized.." << std::endl;
 }
