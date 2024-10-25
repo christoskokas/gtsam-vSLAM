@@ -69,6 +69,9 @@ class FeatureTracker
 
         FeatureTracker(std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, std::shared_ptr<Map> _map);
 
+        // predict next pose with IMU
+        Eigen::Matrix4d PredictNextPoseIMU();
+
         // main tracking function
         void TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr = nullptr);
 

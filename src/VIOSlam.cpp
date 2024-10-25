@@ -166,7 +166,7 @@ int main(int argc, char **argv)
     if (IMUDataValid && imageTimestampsValid)
     {
         const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};
-        const size_t IMUDataPerFrameSize {IMUHz / StereoCam->mFps + 1};
+        const size_t IMUDataPerFrameSize {static_cast<size_t>(std::round(IMUHz / StereoCam->mFps)) + 1};
         int frameNumb {0};
         double frameTimestamp {imageTimestamps[frameNumb]};
         double nextFrameTimestamp {imageTimestamps[frameNumb + 1]};
@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 
     for ( size_t frameNumb{0}; frameNumb < numberFrames; frameNumb++)
     {
-        auto start = std::chrono::high_resolution_clock::now();
+        // auto start = std::chrono::high_resolution_clock::now();
 
         cv::Mat imageLeft = cv::imread(leftImagesStr[frameNumb],cv::IMREAD_COLOR);
         cv::Mat imageRight = cv::imread(rightImagesStr[frameNumb],cv::IMREAD_COLOR);
@@ -238,7 +238,7 @@ int main(int argc, char **argv)
             slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
 
 
-        auto end = std::chrono::high_resolution_clock::now();
+        // auto end = std::chrono::high_resolution_clock::now();
         // double duration = std::chrono::duration_cast<std::chrono::duration<double> >(end - start).count();
 
         // if ( duration < timeBetFrames )

@@ -153,10 +153,17 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     gtsam::NonlinearFactorGraph graph;
     gtsam::Values initialEstimate;
     Eigen::Matrix4d estimPoseInv = estimPose.inverse();
+    Eigen::Matrix4d currentPoseInv = zedPtr->mCameraPose.getPose();
+
 
     gtsam::Pose3 initialPose(
         gtsam::Rot3(estimPoseInv.block<3, 3>(0, 0)),
         gtsam::Point3(estimPoseInv.block<3, 1>(0, 3))
+    );
+
+    gtsam::Pose3 startPose(
+        gtsam::Rot3(currentPoseInv.block<3, 3>(0, 0)),
+        gtsam::Point3(currentPoseInv.block<3, 1>(0, 3))
     );
 
     gtsam::Pose3 gtsamExtrinsics(
@@ -165,7 +172,8 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     );
 
     // Add initial guess to the graph
-    initialEstimate.insert(gtsam::Symbol('x', 0), initialPose);
+    // initialEstimate.insert(gtsam::Symbol('x', 1), initialPose);
+    initialEstimate.insert(gtsam::Symbol('x', 0), startPose);
 
     gtsam::SharedNoiseModel noiseModel = nullptr;
 
@@ -194,7 +202,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
             double sigma = 1.0/feLeft->InvSigmaFactor[octL];
             noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
             auto factor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
-                observation, noiseModel, gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K);
+                observation, noiseModel, gtsam::Symbol('x', 1), gtsam::Symbol('l', i), K);
 
             graph.add(factor);
 
@@ -221,7 +229,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
                         double sigma = 1.0/feLeft->InvSigmaFactor[octR];
                         noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
                         auto factorR = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
-                            observationR, noiseModel, gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
+                            observationR, noiseModel, gtsam::Symbol('x', 1), gtsam::Symbol('l', i), K, gtsamExtrinsics);
 
                         graph.add(factorR);
                         continue;
@@ -245,7 +253,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
             double sigma = 1.0/feLeft->InvSigmaFactor[octR];
             noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
             auto factorR = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
-                observationR, noiseModel, gtsam::Symbol('x', 0), gtsam::Symbol('l', i), K, gtsamExtrinsics);
+                observationR, noiseModel, gtsam::Symbol('x', 1), gtsam::Symbol('l', i), K, gtsamExtrinsics);
 
             graph.add(factorR);
 
@@ -269,7 +277,6 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     
     // Initialize IMU preintegration parameters
     // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
-    gtsam::Vector3 gravityVec(0,0,9.81);
     auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
     
     preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
@@ -280,11 +287,8 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
 
-    // Assume zero bias initially
     gtsam::imuBias::ConstantBias initialBias; 
 
-    // Initialize the preintegrated IMU measurements
-    // gtsam::PreintegratedImuMeasurements preintegratedImu(preintegrationParams, initialBias);
     gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
 
     const size_t IMUDataSize{currentIMUData->mTimestamps.size()};
@@ -308,14 +312,23 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     }
 
     // Insert initial velocity and bias (assumed zero for now)
-    initialEstimate.insert(gtsam::Symbol('v', 0), gtsam::Vector3(0, 0, 0));
+    gtsam::Vector3 priorVel(0,0,0);
+    initialEstimate.insert(gtsam::Symbol('v', 0), priorVel);
     initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
 
-    // Add IMU factor to the graph between pose_0 and pose_1
-    gtsam::Pose3 pose_1 = initialPose;  // We need to estimate the pose at step_1
     graph.add(gtsam::CombinedImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
                                gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
                                gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), preintegratedImu));
+
+    gtsam::NavState prev_state(startPose, priorVel);
+    gtsam::NavState prop_state = prev_state;
+    gtsam::imuBias::ConstantBias prev_bias = initialBias;
+    prop_state = preintegratedImu.predict(prev_state, prev_bias);
+
+
+    initialEstimate.insert(gtsam::Symbol('x',1), prop_state.pose());
+    initialEstimate.insert(gtsam::Symbol('v',1), prop_state.v());
+    initialEstimate.insert(gtsam::Symbol('b',1), prev_bias);
 
     // Add bias factor to the graph
     auto biasNoise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3); // Small noise model for bias
@@ -323,18 +336,16 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
         gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
 
     // Insert pose and velocity estimates at step_1 (initial guess)
-    initialEstimate.insert(gtsam::Symbol('x', 1), pose_1);  // Next pose (to be optimized)
-    initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
-    initialEstimate.insert(gtsam::Symbol('b', 1), initialBias);
+    // initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
+    // initialEstimate.insert(gtsam::Symbol('b', 1), initialBias);
 
-    // Optimize the pose using Levenberg-Marquardt
     gtsam::LevenbergMarquardtParams params;
     params.maxIterations = 100;
     gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, params);
     gtsam::Values result = optimizer.optimize();
 
     // Extract optimized pose
-    gtsam::Pose3 optimizedPose = result.at<gtsam::Pose3>(gtsam::Symbol('x', 0));
+    gtsam::Pose3 optimizedPose = result.at<gtsam::Pose3>(gtsam::Symbol('x', 1));
 
     estimPoseInv.block<3, 3>(0, 0) = optimizedPose.rotation().matrix();
     estimPoseInv.block<3, 1>(0, 3) = optimizedPose.translation();
@@ -718,6 +729,72 @@ void FeatureTracker::setActiveOutliers(std::vector<MapPoint*>& activeMPs, std::v
     }
 }
 
+Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
+{
+    const double gyroNoiseDensity = currentIMUData->mGyroNoiseDensity;
+    double gyroRandomWalk = currentIMUData->mGyroRandomWalk;
+    double accelNoiseDensity = currentIMUData->mAccelNoiseDensity;
+    double accelRandomWalk = currentIMUData->mAccelRandomWalk;
+    
+    // Initialize IMU preintegration parameters
+    // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
+    auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
+    
+    preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
+    preintegrationParams->accelerometerCovariance = gtsam::Matrix33::Identity() * pow(accelNoiseDensity, 2);
+
+    preintegrationParams->biasOmegaCovariance = gtsam::Matrix33::Identity() * pow(gyroRandomWalk, 2);
+    preintegrationParams->biasAccCovariance = gtsam::Matrix33::Identity() * pow(accelRandomWalk, 2);
+
+    preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
+
+    gtsam::imuBias::ConstantBias initialBias; 
+
+    gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
+
+    const size_t IMUDataSize{currentIMUData->mTimestamps.size()};
+    double dt {currentIMUData->mHz/zedPtr->mFps};
+    for (size_t i = 0; i < IMUDataSize; ++i)
+    {
+        const auto& acceleration = currentIMUData->mAcceleration[i];
+        const auto& angleVelocity = currentIMUData->mAngleVelocity[i];
+        gtsam::Vector3 accel(acceleration[0], acceleration[1], acceleration[2]);
+        gtsam::Vector3 angleVel(angleVelocity[0], angleVelocity[1], angleVelocity[2]);
+
+        if ((i+1) < IMUDataSize)
+        {
+            const auto& timestamp0 = currentIMUData->mTimestamps[i];
+            const auto& timestamp1 = currentIMUData->mTimestamps[i+1];
+            dt = (timestamp1 - timestamp0) / 1e9;
+        }
+
+        // Integrate the IMU measurements
+        preintegratedImu.integrateMeasurement(accel, angleVel, dt);
+    }
+
+    // Insert initial velocity and bias (assumed zero for now)
+    gtsam::Vector3 priorVel(0,0,0);
+
+    const Eigen::Matrix4d& currentCamPose = zedPtr->mCameraPose.getPose();
+
+    gtsam::Pose3 startPose(
+        gtsam::Rot3(currentCamPose.block<3, 3>(0, 0)),
+        gtsam::Point3(currentCamPose.block<3, 1>(0, 3))
+    );
+
+    gtsam::NavState prev_state(startPose, priorVel);
+    gtsam::NavState prop_state = prev_state;
+    gtsam::imuBias::ConstantBias prev_bias = initialBias;
+    prop_state = preintegratedImu.predict(prev_state, prev_bias);
+
+    gtsam::Pose3 predPose = prop_state.pose();
+    Eigen::Matrix4d predPoseEigen = Eigen::Matrix4d::Identity();
+    predPoseEigen.block<3, 3>(0, 0) = predPose.rotation().matrix();
+    predPoseEigen.block<3, 1>(0, 3) = predPose.translation();
+    return predPoseEigen;
+
+}
+
 void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr /* = nullptr*/)
 {
     if (IMUDataptr)
@@ -770,10 +847,17 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
 
         return;
     }
+
+    predNPoseInv = PredictNextPoseIMU();
+    predNPose = predNPoseInv.inverse();
+
+    Eigen::Matrix4d estimPose = predNPoseInv;
+
+
     std::vector<MapPoint *> activeMpsTemp;
     {
     std::lock_guard<std::mutex> lock(map->mapMutex);
-    removeOutOfFrameMPsR(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);
+    removeOutOfFrameMPsR(zedPtr->mCameraPose.pose, estimPose, activeMapPoints);
     activeMpsTemp = activeMapPoints;
     }
 
@@ -787,7 +871,7 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
     
     std::vector<bool> MPsOutliers(activeMpsTemp.size(),false);
 
-    Eigen::Matrix4d estimPose = predNPoseInv;
+    // Eigen::Matrix4d estimPose = PredictNextPoseIMU();
 
     float rad {10.0};
 
@@ -903,8 +987,8 @@ void FeatureTracker::publishPoseNew()
     zedPtr->mCameraPose.setPose(poseEst);
     zedPtr->mCameraPose.refPose = referencePose;
     predNPoseRef = prevWPoseInv * poseEst;
-    predNPose = poseEst * predNPoseRef;
-    predNPoseInv = predNPose.inverse();
+    // predNPose = poseEst * predNPoseRef;
+    // predNPoseInv = predNPose.inverse();
 }
 
 } // namespace TII
