@@ -271,6 +271,8 @@ int main(int argc, char **argv)
 
     }
 
+    StereoCam->mCameraLeft->mIMUGravity = IMUDataPerFrame[1].mAcceleration[0];
+
     cv::Mat rectMap[2][2];
     const int width = StereoCam->mWidth;
     const int height = StereoCam->mHeight;

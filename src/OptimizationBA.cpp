@@ -1329,10 +1329,10 @@ void LocalMapper::beginLocalMapping()
             lastKF->getConnectedKFs(actKeyF, actvKFMaxSize);
             
             {
-            triangulateNewPointsR(actKeyF);
+            // triangulateNewPointsR(actKeyF);
             }
             {
-            localBAR(actKeyF);
+            // localBAR(actKeyF);
             }
 
         }

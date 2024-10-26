@@ -67,6 +67,7 @@ namespace TII
     std::shared_ptr<IMUData> mIMUData;
     Eigen::Vector3d mVelocity {0,0,0};
     Eigen::Vector3d mNewVelocity {0,0,0};
+    Eigen::Vector3d mIMUGravity {0,0,0};
 
     double fx {},fy {},cx {}, cy {};
     Eigen::Matrix<double,4,4> TBodyToCam = Eigen::Matrix<double,4,4>::Identity();
