@@ -67,6 +67,7 @@ namespace TII
     std::shared_ptr<IMUData> mIMUData;
 
     double fx {},fy {},cx {}, cy {};
+    Eigen::Matrix<double,4,4> TBodyToCam = Eigen::Matrix<double,4,4>::Identity();
     Eigen::Matrix<double,3,3> intrinsics = Eigen::Matrix<double,3,3>::Identity();
     private:
     bool rectified {};

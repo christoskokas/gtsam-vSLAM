@@ -174,6 +174,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     // Add initial guess to the graph
     // initialEstimate.insert(gtsam::Symbol('x', 1), initialPose);
     initialEstimate.insert(gtsam::Symbol('x', 0), startPose);
+    graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', 0), startPose));
 
     gtsam::SharedNoiseModel noiseModel = nullptr;
 
@@ -286,6 +287,14 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     preintegrationParams->biasAccCovariance = gtsam::Matrix33::Identity() * pow(accelRandomWalk, 2);
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
+
+    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam;
+    gtsam::Pose3 TBodyToCamGtsam(
+        gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
+        gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
+    );
+
+    preintegrationParams->body_P_sensor = TBodyToCamGtsam;
 
     gtsam::imuBias::ConstantBias initialBias; 
 
@@ -748,6 +757,14 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
 
+    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam.inverse();
+    gtsam::Pose3 TBodyToCamGtsam(
+        gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
+        gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
+    );
+
+    preintegrationParams->body_P_sensor = TBodyToCamGtsam;
+
     gtsam::imuBias::ConstantBias initialBias; 
 
     gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
@@ -848,16 +865,16 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
         return;
     }
 
-    predNPoseInv = PredictNextPoseIMU();
-    predNPose = predNPoseInv.inverse();
+    // predNPoseInv = PredictNextPoseIMU();
+    // predNPose = predNPoseInv.inverse();
 
-    Eigen::Matrix4d estimPose = predNPose;
+    Eigen::Matrix4d estimPose = predNPoseInv;
 
 
     std::vector<MapPoint *> activeMpsTemp;
     {
     std::lock_guard<std::mutex> lock(map->mapMutex);
-    removeOutOfFrameMPsR(zedPtr->mCameraPose.pose, estimPose, activeMapPoints);
+    removeOutOfFrameMPsR(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);
     activeMpsTemp = activeMapPoints;
     }
 
@@ -987,8 +1004,8 @@ void FeatureTracker::publishPoseNew()
     zedPtr->mCameraPose.setPose(poseEst);
     zedPtr->mCameraPose.refPose = referencePose;
     predNPoseRef = prevWPoseInv * poseEst;
-    // predNPose = poseEst * predNPoseRef;
-    // predNPoseInv = predNPose.inverse();
+    predNPose = poseEst * predNPoseRef;
+    predNPoseInv = predNPose.inverse();
 }
 
 } // namespace TII

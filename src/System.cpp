@@ -39,6 +39,12 @@ void VSlamSystem::InitializeStereo()
 {
   auto cameraLeft = std::make_shared<Camera>(mConfigFile, "Camera_l");
   auto cameraRight = std::make_shared<Camera>(mConfigFile, "Camera_r");
+
+  std::vector < double > tBIMU = mConfigFile->getValue<std::vector<double>>("T_bc1", "data");
+
+  Eigen::Matrix4d tBodyToImu;
+  tBodyToImu = Eigen::Map<const Eigen::Matrix<double, 4, 4, Eigen::RowMajor>>(tBIMU.data());
+  cameraLeft->TBodyToCam = tBodyToImu;
   mStereoCamera = std::make_shared<StereoCamera>(mConfigFile, cameraLeft, cameraRight);
   mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
   mFeatureExtractorRight = std::make_shared<FeatureExtractor>();

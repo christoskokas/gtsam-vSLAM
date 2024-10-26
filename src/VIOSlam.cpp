@@ -152,9 +152,12 @@ Eigen::Vector3d transformAngularVelocity(const Eigen::Vector3d& imu_angular_velo
     return R_imu_to_cam * imu_angular_velocity;
 }
 
-Eigen::Vector3d transformLinearAcceleration(const Eigen::Vector3d& imu_linear_acceleration, const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam, const Eigen::Vector3d& t_imu_to_cam) {
-    Eigen::Vector3d acc_adjusted = imu_linear_acceleration 
-                                 - imu_angular_velocity.cross(imu_angular_velocity.cross(t_imu_to_cam));
+Eigen::Vector3d transformLinearAcceleration(const Eigen::Vector3d& imu_linear_acceleration, const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam, const Eigen::Vector3d& t_imu_to_cam) 
+{
+    Eigen::Vector3d omega = imu_angular_velocity;
+    Eigen::Vector3d acc_adjusted = imu_linear_acceleration;
+    Eigen::Vector3d centripetal = -omega.cross(omega.cross(t_imu_to_cam));
+    acc_adjusted += centripetal;
     return R_imu_to_cam * acc_adjusted;
 }
 
@@ -226,7 +229,7 @@ int main(int argc, char **argv)
         int frameNumb {0};
         double frameTimestamp {imageTimestamps[frameNumb]};
         double nextFrameTimestamp {imageTimestamps[frameNumb + 1]};
-
+        bool first = true;
         IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
         IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
         IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
@@ -235,7 +238,9 @@ int main(int argc, char **argv)
             const auto& IMUTimestamp = allIMUData.mTimestamps[i];
             if (IMUTimestamp > frameTimestamp && IMUTimestamp > nextFrameTimestamp)
             {
-                frameNumb ++;
+                if (!first)
+                    frameNumb ++;
+                first = false;
                 frameTimestamp = imageTimestamps[frameNumb];
                 nextFrameTimestamp = imageTimestamps[frameNumb + 1];
                 IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
@@ -250,16 +255,16 @@ int main(int argc, char **argv)
 
                 // Eigen::Vector3d angleCamFrame, accelCamFrame;
 
-                Eigen::Matrix3d RImu = tBodyToImu.block<3,3>(0,0);
-                Eigen::Vector3d tImu = tBodyToImu.block<3,1>(0,3);
                 // transformIMUToCameraFrame2(angleVel, accel, tBodyToImu, angleCamFrame, accelCamFrame);
                 // // transformIMUToCameraFrame(angleVel, accel, tBodyToImuInv.block<3,3>(0,0), tBodyToImuInv.block<3,1>(0,3), angleCamFrame, accelCamFrame);
 
-                Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
-                Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
+                // Eigen::Matrix3d RImu = tBodyToImu.block<3,3>(0,0);
+                // Eigen::Vector3d tImu = tBodyToImu.block<3,1>(0,3);
+                // Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
+                // Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
 
-                IMUFrame.mAngleVelocity.emplace_back(angleCamFrame);
-                IMUFrame.mAcceleration.emplace_back(accelCamFrame);
+                IMUFrame.mAngleVelocity.emplace_back(angleVel);
+                IMUFrame.mAcceleration.emplace_back(accel);
                 IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
             }
         }
