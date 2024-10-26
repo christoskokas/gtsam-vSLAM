@@ -238,9 +238,9 @@ int main(int argc, char **argv)
             const auto& IMUTimestamp = allIMUData.mTimestamps[i];
             if (IMUTimestamp > frameTimestamp && IMUTimestamp > nextFrameTimestamp)
             {
-                if (!first)
-                    frameNumb ++;
-                first = false;
+                // if (!first)
+                frameNumb ++;
+                // first = false;
                 frameTimestamp = imageTimestamps[frameNumb];
                 nextFrameTimestamp = imageTimestamps[frameNumb + 1];
                 IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
@@ -258,13 +258,13 @@ int main(int argc, char **argv)
                 // transformIMUToCameraFrame2(angleVel, accel, tBodyToImu, angleCamFrame, accelCamFrame);
                 // // transformIMUToCameraFrame(angleVel, accel, tBodyToImuInv.block<3,3>(0,0), tBodyToImuInv.block<3,1>(0,3), angleCamFrame, accelCamFrame);
 
-                // Eigen::Matrix3d RImu = tBodyToImuInv.block<3,3>(0,0);
-                // Eigen::Vector3d tImu = tBodyToImuInv.block<3,1>(0,3);
-                // Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
-                // Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
+                Eigen::Matrix3d RImu = tBodyToImuInv.block<3,3>(0,0);
+                Eigen::Vector3d tImu = tBodyToImuInv.block<3,1>(0,3);
+                Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
+                Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
 
-                IMUFrame.mAngleVelocity.emplace_back(angleVel);
-                IMUFrame.mAcceleration.emplace_back(accel);
+                IMUFrame.mAngleVelocity.emplace_back(angleCamFrame);
+                IMUFrame.mAcceleration.emplace_back(accelCamFrame);
                 IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
             }
         }

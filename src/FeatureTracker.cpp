@@ -278,7 +278,8 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     
     // Initialize IMU preintegration parameters
     // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
-    auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
+    // auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
+    auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(0, 9.81, 0)));
     
     preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
     preintegrationParams->accelerometerCovariance = gtsam::Matrix33::Identity() * pow(accelNoiseDensity, 2);
@@ -288,13 +289,13 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
 
-    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam.inverse();
-    gtsam::Pose3 TBodyToCamGtsam(
-        gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
-        gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
-    );
+    // const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam.inverse();
+    // gtsam::Pose3 TBodyToCamGtsam(
+    //     gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
+    //     gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
+    // );
 
-    preintegrationParams->body_P_sensor = TBodyToCamGtsam;
+    // preintegrationParams->body_P_sensor = TBodyToCamGtsam;
 
     gtsam::imuBias::ConstantBias initialBias; 
 
@@ -323,7 +324,9 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     // Insert initial velocity and bias (assumed zero for now)
     gtsam::Vector3 priorVel(zedPtr->mCameraLeft->mVelocity.data());
     initialEstimate.insert(gtsam::Symbol('v', 0), priorVel);
+    graph.add(gtsam::NonlinearEquality<gtsam::Vector3>(gtsam::Symbol('v', 0), priorVel));
     initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
+    graph.add(gtsam::NonlinearEquality<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', 0), initialBias));
 
     graph.add(gtsam::CombinedImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
                                gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
@@ -344,6 +347,11 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     graph.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(
         gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
 
+    graph.add(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::Symbol('x', 0), gtsam::Symbol('x', 1),prop_state.pose()));
+    // graph.add(gtsam::PriorFactor<gtsam::Pose3>(gtsam::Symbol('x', 1),prop_state.pose()));
+
+    graph.add(gtsam::BetweenFactor<gtsam::Vector3>(gtsam::Symbol('v', 0), gtsam::Symbol('v', 1),prop_state.v()));
+    // graph.add(gtsam::PriorFactor<gtsam::Vector3>(gtsam::Symbol('v', 1),prop_state.v()));
     // Insert pose and velocity estimates at step_1 (initial guess)
     // initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
     // initialEstimate.insert(gtsam::Symbol('b', 1), initialBias);
@@ -750,7 +758,7 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
     
     // Initialize IMU preintegration parameters
     // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
-    auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
+    auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(0, 9.81, 0)));
     
     preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
     preintegrationParams->accelerometerCovariance = gtsam::Matrix33::Identity() * pow(accelNoiseDensity, 2);
@@ -759,14 +767,6 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
     preintegrationParams->biasAccCovariance = gtsam::Matrix33::Identity() * pow(accelRandomWalk, 2);
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
-
-    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam.inverse();
-    gtsam::Pose3 TBodyToCamGtsam(
-        gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
-        gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
-    );
-
-    preintegrationParams->body_P_sensor = TBodyToCamGtsam;
 
     gtsam::imuBias::ConstantBias initialBias; 
 

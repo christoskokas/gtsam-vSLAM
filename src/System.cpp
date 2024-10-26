@@ -37,13 +37,13 @@ void VSlamSystem::InitializeMonocular()
 
 void VSlamSystem::InitializeStereo()
 {
-  int nFeatures = mConf->getValue<int>("FE", "nFeatures");
-  int nLevels = mConf->getValue<int>("FE", "nLevels");
-  float imScale = mConf->getValue<float>("FE", "imScale");
-  int edgeThreshold = mConf->getValue<int>("FE", "edgeThreshold");
-  int maxFastThreshold = mConf->getValue<int>("FE", "maxFastThreshold");
-  int minFastThreshold = mConf->getValue<int>("FE", "minFastThreshold");
-  int patchSize = mConf->getValue<int>("FE", "patchSize");
+  int nFeatures = mConfigFile->getValue<int>("FE", "nFeatures");
+  int nLevels = mConfigFile->getValue<int>("FE", "nLevels");
+  float imScale = mConfigFile->getValue<float>("FE", "imScale");
+  int edgeThreshold = mConfigFile->getValue<int>("FE", "edgeThreshold");
+  int maxFastThreshold = mConfigFile->getValue<int>("FE", "maxFastThreshold");
+  int minFastThreshold = mConfigFile->getValue<int>("FE", "minFastThreshold");
+  int patchSize = mConfigFile->getValue<int>("FE", "patchSize");
 
   auto cameraLeft = std::make_shared<Camera>(mConfigFile, "Camera_l");
   auto cameraRight = std::make_shared<Camera>(mConfigFile, "Camera_r");
