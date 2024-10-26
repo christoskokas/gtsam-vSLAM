@@ -109,6 +109,55 @@ bool getImageTimestamps(std::vector<std::string>& fileNameVec, std::vector<doubl
     return true;
 }
 
+// Function to transform IMU data to camera frame
+void transformIMUToCameraFrame(
+    const Eigen::Vector3d& angular_velocity_imu,  // Angular velocity in IMU frame
+    const Eigen::Vector3d& linear_acceleration_imu, // Linear acceleration in IMU frame
+    const Eigen::Matrix3d& R_imu_to_cam,           // Rotation matrix from IMU to camera frame
+    const Eigen::Vector3d& t_imu_to_cam,           // Translation vector from IMU to camera frame
+    Eigen::Vector3d& angular_velocity_cam,         // Transformed angular velocity in camera frame
+    Eigen::Vector3d& linear_acceleration_cam       // Transformed linear acceleration in camera frame
+) {
+    // Transform angular velocity to the camera frame
+    angular_velocity_cam = R_imu_to_cam * angular_velocity_imu;
+
+    // Compute the cross-product terms for linear acceleration transformation
+    Eigen::Vector3d omega_cross_r = angular_velocity_cam.cross(t_imu_to_cam);
+    Eigen::Vector3d omega_cross_omega_cross_r = angular_velocity_cam.cross(omega_cross_r);
+
+    // Transform linear acceleration to the camera frame
+    linear_acceleration_cam = R_imu_to_cam * (linear_acceleration_imu - omega_cross_omega_cross_r);
+}
+
+// Function to transform IMU data to camera frame
+void transformIMUToCameraFrame2(
+    const Eigen::Vector3d& angular_velocity_imu,  // Angular velocity in IMU frame
+    const Eigen::Vector3d& linear_acceleration_imu, // Linear acceleration in IMU frame
+    const Eigen::Matrix4d& T_imu_to_cam, 
+    Eigen::Vector3d& angular_velocity_cam,         // Transformed angular velocity in camera frame
+    Eigen::Vector3d& linear_acceleration_cam       // Transformed linear acceleration in camera frame
+) {
+    // Transform angular velocity to the camera frame
+    Eigen::Vector4d angV4(angular_velocity_imu(0), angular_velocity_imu(1), angular_velocity_imu(2),1.0);
+    Eigen::Vector4d accV4(linear_acceleration_cam(0), linear_acceleration_cam(1), linear_acceleration_cam(2),1.0);
+    
+    Eigen::Vector4d angTV4 = T_imu_to_cam * angV4;
+    Eigen::Vector4d accTV4 = T_imu_to_cam * accV4;
+
+    angular_velocity_cam = Eigen::Vector3d(angTV4(0), angTV4(1), angTV4(2));
+    linear_acceleration_cam = Eigen::Vector3d(accTV4(0), accTV4(1), accTV4(2));
+}
+
+Eigen::Vector3d transformAngularVelocity(const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam) {
+    return R_imu_to_cam * imu_angular_velocity;
+}
+
+Eigen::Vector3d transformLinearAcceleration(const Eigen::Vector3d& imu_linear_acceleration, const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam, const Eigen::Vector3d& t_imu_to_cam) {
+    Eigen::Vector3d acc_adjusted = imu_linear_acceleration 
+                                 - imu_angular_velocity.cross(imu_angular_velocity.cross(t_imu_to_cam));
+    return R_imu_to_cam * acc_adjusted;
+}
+
 int main(int argc, char **argv)
 {
     if ( argc < 2 )
@@ -161,6 +210,13 @@ int main(int argc, char **argv)
         rightImagesStr.emplace_back(rightPath + imageName);
     }
 
+    std::vector < double > tBIMU = confFile->getValue<std::vector<double>>("T_bc1", "data");
+
+    Eigen::Matrix4d tBodyToImu;
+    tBodyToImu = Eigen::Map<const Eigen::Matrix<double, 4, 4, Eigen::RowMajor>>(tBIMU.data());
+
+    Eigen::Matrix4d tBodyToImuInv = tBodyToImu.inverse();
+
     // Get all the IMU Data between each new frame for pre Integration
     auto IMUDataPerFrame = std::vector<TII::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
     if (IMUDataValid && imageTimestampsValid)
@@ -191,8 +247,19 @@ int main(int argc, char **argv)
             {
                 const auto& angleVel = allIMUData.mAngleVelocity[i];
                 const auto& accel = allIMUData.mAcceleration[i];
-                IMUFrame.mAngleVelocity.emplace_back(angleVel);
-                IMUFrame.mAcceleration.emplace_back(accel);
+
+                // Eigen::Vector3d angleCamFrame, accelCamFrame;
+
+                Eigen::Matrix3d RImu = tBodyToImu.block<3,3>(0,0);
+                Eigen::Vector3d tImu = tBodyToImu.block<3,1>(0,3);
+                // transformIMUToCameraFrame2(angleVel, accel, tBodyToImu, angleCamFrame, accelCamFrame);
+                // // transformIMUToCameraFrame(angleVel, accel, tBodyToImuInv.block<3,3>(0,0), tBodyToImuInv.block<3,1>(0,3), angleCamFrame, accelCamFrame);
+
+                Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
+                Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
+
+                IMUFrame.mAngleVelocity.emplace_back(angleCamFrame);
+                IMUFrame.mAcceleration.emplace_back(accelCamFrame);
                 IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
             }
         }

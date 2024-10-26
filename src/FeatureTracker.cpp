@@ -851,7 +851,7 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
     predNPoseInv = PredictNextPoseIMU();
     predNPose = predNPoseInv.inverse();
 
-    Eigen::Matrix4d estimPose = predNPoseInv;
+    Eigen::Matrix4d estimPose = predNPose;
 
 
     std::vector<MapPoint *> activeMpsTemp;
