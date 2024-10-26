@@ -288,7 +288,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 0.0001;
 
-    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam;
+    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam.inverse();
     gtsam::Pose3 TBodyToCamGtsam(
         gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
         gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
@@ -321,7 +321,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     }
 
     // Insert initial velocity and bias (assumed zero for now)
-    gtsam::Vector3 priorVel(0,0,0);
+    gtsam::Vector3 priorVel(zedPtr->mCameraLeft->mVelocity.data());
     initialEstimate.insert(gtsam::Symbol('v', 0), priorVel);
     initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
 
@@ -355,6 +355,9 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
     // Extract optimized pose
     gtsam::Pose3 optimizedPose = result.at<gtsam::Pose3>(gtsam::Symbol('x', 1));
+
+    gtsam::Vector3 camVelocity = result.at<gtsam::Vector3>(gtsam::Symbol('v', 1));
+    zedPtr->mCameraLeft->mNewVelocity = Eigen::Vector3d(camVelocity.data());
 
     estimPoseInv.block<3, 3>(0, 0) = optimizedPose.rotation().matrix();
     estimPoseInv.block<3, 1>(0, 3) = optimizedPose.translation();
@@ -979,6 +982,7 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
     setActiveOutliers(activeMpsTemp,MPsOutliers, matchesIdxs);
 
     currentIMUData = nullptr;
+    zedPtr->mCameraLeft->mVelocity = zedPtr->mCameraLeft->mNewVelocity;
 }
 
 void FeatureTracker::drawKeys(const char* com, cv::Mat& im, std::vector<cv::KeyPoint>& keys, std::vector<bool>& close)

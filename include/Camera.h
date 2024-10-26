@@ -65,6 +65,8 @@ namespace TII
     cv::Mat P = cv::Mat::eye(3,4,CV_64F);
 
     std::shared_ptr<IMUData> mIMUData;
+    Eigen::Vector3d mVelocity {0,0,0};
+    Eigen::Vector3d mNewVelocity {0,0,0};
 
     double fx {},fy {},cx {}, cy {};
     Eigen::Matrix<double,4,4> TBodyToCam = Eigen::Matrix<double,4,4>::Identity();

@@ -258,8 +258,8 @@ int main(int argc, char **argv)
                 // transformIMUToCameraFrame2(angleVel, accel, tBodyToImu, angleCamFrame, accelCamFrame);
                 // // transformIMUToCameraFrame(angleVel, accel, tBodyToImuInv.block<3,3>(0,0), tBodyToImuInv.block<3,1>(0,3), angleCamFrame, accelCamFrame);
 
-                // Eigen::Matrix3d RImu = tBodyToImu.block<3,3>(0,0);
-                // Eigen::Vector3d tImu = tBodyToImu.block<3,1>(0,3);
+                // Eigen::Matrix3d RImu = tBodyToImuInv.block<3,3>(0,0);
+                // Eigen::Vector3d tImu = tBodyToImuInv.block<3,1>(0,3);
                 // Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
                 // Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
 

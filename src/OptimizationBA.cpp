@@ -806,9 +806,19 @@ void LocalMapper::localBAR(std::vector<KeyFrame *>& actKeyF)
     params.absoluteErrorTol = 1e-5;
     // if ( first )
     //     params.maxIterations = 5;
-
     gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, params);
-    result = optimizer.optimize();
+    try
+    {
+        result = optimizer.optimize();
+    }
+    catch(const gtsam::IndeterminantLinearSystemException& e)
+    {
+        std::cout << "Bundle Adjustment Failed... : IndeterminantLinearSystemException" << std::endl;
+        map->keyFrameAdded = false;
+        map->LBADone = true;
+        return;
+    }
+    
 
     std::vector<std::pair<KeyFrame*, MapPoint*>> emptyVec;
     wrongMatches.swap(emptyVec);
@@ -1319,10 +1329,10 @@ void LocalMapper::beginLocalMapping()
             lastKF->getConnectedKFs(actKeyF, actvKFMaxSize);
             
             {
-            // triangulateNewPointsR(actKeyF);
+            triangulateNewPointsR(actKeyF);
             }
             {
-            // localBAR(actKeyF);
+            localBAR(actKeyF);
             }
 
         }

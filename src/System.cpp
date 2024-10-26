@@ -37,8 +37,17 @@ void VSlamSystem::InitializeMonocular()
 
 void VSlamSystem::InitializeStereo()
 {
+  int nFeatures = mConf->getValue<int>("FE", "nFeatures");
+  int nLevels = mConf->getValue<int>("FE", "nLevels");
+  float imScale = mConf->getValue<float>("FE", "imScale");
+  int edgeThreshold = mConf->getValue<int>("FE", "edgeThreshold");
+  int maxFastThreshold = mConf->getValue<int>("FE", "maxFastThreshold");
+  int minFastThreshold = mConf->getValue<int>("FE", "minFastThreshold");
+  int patchSize = mConf->getValue<int>("FE", "patchSize");
+
   auto cameraLeft = std::make_shared<Camera>(mConfigFile, "Camera_l");
   auto cameraRight = std::make_shared<Camera>(mConfigFile, "Camera_r");
+
 
   std::vector < double > tBIMU = mConfigFile->getValue<std::vector<double>>("T_bc1", "data");
 
@@ -46,8 +55,8 @@ void VSlamSystem::InitializeStereo()
   tBodyToImu = Eigen::Map<const Eigen::Matrix<double, 4, 4, Eigen::RowMajor>>(tBIMU.data());
   cameraLeft->TBodyToCam = tBodyToImu;
   mStereoCamera = std::make_shared<StereoCamera>(mConfigFile, cameraLeft, cameraRight);
-  mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
-  mFeatureExtractorRight = std::make_shared<FeatureExtractor>();
+  mFeatureExtractorLeft = std::make_shared<FeatureExtractor>(nFeatures, nLevels, imScale, edgeThreshold, patchSize, maxFastThreshold, minFastThreshold);
+  mFeatureExtractorRight = std::make_shared<FeatureExtractor>(nFeatures, nLevels, imScale, edgeThreshold, patchSize, maxFastThreshold, minFastThreshold);
   mFeatureMatcher = std::make_shared<FeatureMatcher>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight);
   mFeatureTracker = std::make_shared<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
   std::cout << "Stereo Camera Initialized.." << std::endl;
