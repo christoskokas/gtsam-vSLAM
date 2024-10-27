@@ -79,7 +79,7 @@ void Visualizer::DrawPoints()
       }
       else
       {
-        colors.emplace_back(1.0,1.0,0.0,1.0);
+        colors.emplace_back(1.0,1.0,1.0,1.0);
       }
 
       points.emplace_back((*itw).second->wp3d(0),(*itw).second->wp3d(1),(*itw).second->wp3d(2));
@@ -88,7 +88,7 @@ void Visualizer::DrawPoints()
   auto cloudBuffer = std::make_shared<glk::PointCloudBuffer>(points);
   cloudBuffer->add_color(colors);
 
-  auto shaderSetting = guik::VertexColor();
+  auto shaderSetting = guik::VertexColor().set_point_scale(2.0f);
   mViewer->update_drawable("points", cloudBuffer, shaderSetting);
 }
 

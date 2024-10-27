@@ -13,6 +13,7 @@
 #include <string>
 #include <iostream>
 #include <random>
+#include <gtsam/navigation/ImuBias.h>
 
 namespace TII
 {
@@ -64,6 +65,8 @@ class FeatureTracker
         std::vector<MapPoint*>& activeMapPoints;
         std::vector<KeyFrame*>& allFrames;
         std::shared_ptr<IMUData> currentIMUData;
+
+        gtsam::imuBias::ConstantBias initialBias;
 
     public :
 

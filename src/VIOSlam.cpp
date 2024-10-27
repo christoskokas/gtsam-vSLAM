@@ -263,15 +263,15 @@ int main(int argc, char **argv)
                 Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
                 Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
 
-                IMUFrame.mAngleVelocity.emplace_back(angleCamFrame);
-                IMUFrame.mAcceleration.emplace_back(accelCamFrame);
+                IMUFrame.mAngleVelocity.emplace_back(angleVel);
+                IMUFrame.mAcceleration.emplace_back(accel);
                 IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
             }
         }
 
     }
 
-    StereoCam->mCameraLeft->mIMUGravity = IMUDataPerFrame[1].mAcceleration[0];
+    StereoCam->mCameraLeft->mIMUGravity = {IMUDataPerFrame[0].mAcceleration[0](1), -IMUDataPerFrame[0].mAcceleration[0](0),IMUDataPerFrame[0].mAcceleration[0](2)};
 
     cv::Mat rectMap[2][2];
     const int width = StereoCam->mWidth;
