@@ -97,6 +97,8 @@ src/FeatureTracker.cpp
 src/FeatureMatcher.cpp
 src/KeyFrame.cpp
 src/Optimizer.cpp
+src/OptimizationBA.cpp
+include/OptimizationBA.h
 include/Optimizer.h
 include/KeyFrame.h
 include/FeatureMatcher.h

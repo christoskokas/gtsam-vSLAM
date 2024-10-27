@@ -4,7 +4,7 @@ namespace TII
 {
 
 
-void Visualizer::DrawCameraFrame()
+void Visualizer::GetCameraFrame(std::shared_ptr<glk::ThinLines>& lines)
 {
   const float w = cameraWidth;
   const float h = w * 0.75;
@@ -25,18 +25,18 @@ void Visualizer::DrawCameraFrame()
   // Set whether to draw as a line strip or individual lines
   bool line_strip = false;
   // Create the lines with the given vertices
-  auto lines = std::make_shared<glk::ThinLines>(vertices, line_strip);
+  lines = std::make_shared<glk::ThinLines>(vertices, line_strip);
 
-  lines->set_line_width(5.0f);
+  lines->set_line_width(2.0f);
 
-  auto transformation = mStereoCamera->mCameraPose.getPose();
-  // Set the color using guik::FlatColor
-  auto line_settings = guik::FlatColor({1.0f, 1.0f, 1.0f, 1.0f}, transformation); 
+  // auto transformation = mStereoCamera->mCameraPose.getPose();
+  // // Set the color using guik::FlatColor
+  // auto line_settings = guik::FlatColor({1.0f, 1.0f, 1.0f, 1.0f}, transformation); 
 
-  // Add to the viewer
-  mViewer->update_drawable("camera_frame", lines, line_settings);
-  const Eigen::Vector3f cameraPos(transformation(0,3), transformation(1,3), transformation(2,3));
-  mViewer->lookat(cameraPos);
+  // // Add to the viewer
+  // mViewer->update_drawable("camera_frame", lines, line_settings);
+  // const Eigen::Vector3f cameraPos(transformation(0,3), transformation(1,3), transformation(2,3));
+  // mViewer->lookat(cameraPos);
 }
 
 void Visualizer::LineFromKeyFrameToCamera()
@@ -44,11 +44,15 @@ void Visualizer::LineFromKeyFrameToCamera()
 
 }
 
-void Visualizer::DrawCamera()
+void Visualizer::DrawCamera(const Eigen::Matrix4d& cameraPose, const Eigen::Vector4f& color, const std::string& cameraName)
 {
-  auto transformation = mStereoCamera->mCameraPose.getPose();
-  auto settings = guik::FlatColor({1.0f, 0.5f, 0.2f, 1.0f}, transformation);
-  mViewer->update_drawable("Currect Camera", glk::Primitives::wire_cone(), settings);
+  std::shared_ptr<glk::ThinLines> lines;
+  GetCameraFrame(lines);
+  auto transformation = cameraPose;
+  auto line_settings = guik::FlatColor( color, transformation); 
+
+  // Add to the viewer
+  mViewer->update_drawable(cameraName, lines, line_settings);
 }
 
 void Visualizer::DrawPoints()
@@ -70,9 +74,13 @@ void Visualizer::DrawPoints()
           continue;
 
       if ( (*itw).second->getActive() )
-        colors.emplace_back(0.0,1.0,0,1.0);
+      {
+        colors.emplace_back(0.0,1.0,0.0,1.0);
+      }
       else
-        colors.emplace_back(0.0,1.0,0,1.0);
+      {
+        colors.emplace_back(1.0,1.0,1.0,1.0);
+      }
 
       points.emplace_back((*itw).second->wp3d(0),(*itw).second->wp3d(1),(*itw).second->wp3d(2));
   }
@@ -80,13 +88,27 @@ void Visualizer::DrawPoints()
   auto cloudBuffer = std::make_shared<glk::PointCloudBuffer>(points);
   cloudBuffer->add_color(colors);
 
-  // auto shaderSetting = guik::Rainbow().set_point_scale(2.0f);
-  mViewer->update_drawable("points", cloudBuffer);
+  auto shaderSetting = guik::VertexColor().set_point_scale(2.0f);
+  mViewer->update_drawable("points", cloudBuffer, shaderSetting);
 }
 
 void Visualizer::DrawKeyFrames()
 {
+  const int lastKeyFrameIdx {(int)mMap->kIdx - 1};
+    if (lastKeyFrameIdx < 0)
+        return;
 
+    std::unordered_map<unsigned long, KeyFrame*> mapKeyF = mMap->keyFrames;
+    std::unordered_map<unsigned long,KeyFrame*>::const_iterator it, end(mapKeyF.end());
+    for ( it = mapKeyF.begin(); it != end; it ++)
+    {
+
+        if (!(*it).second->visualize)
+            continue;
+        Eigen::Matrix4d keyPose = (*it).second->getPose();
+        DrawCamera(keyPose, {0.0f, 0.0f, 1.0f, 1.0f}, "keyframe_" + std::to_string(it->second->numb));
+
+    }
 }
 
 Visualizer::Visualizer(std::shared_ptr<StereoCamera> stereoCamera, std::shared_ptr<Map> map) : mStereoCamera(stereoCamera), mMap(map)
@@ -117,7 +139,11 @@ void Visualizer::RenderScene() {
   while (mViewer->spin_once()) 
   {
     DrawPoints();
-    DrawCameraFrame();
+    DrawCamera(mStereoCamera->mCameraPose.getPose(), {1.0f, 1.0f, 0.0f, 1.0f}, "Current Camera");
+    DrawKeyFrames();
+
+    const Eigen::Vector3f cameraPos(mStereoCamera->mCameraPose.getPose().block<3,1>(0,3).cast<float>());
+    mViewer->lookat(cameraPos);
   }
   
 }

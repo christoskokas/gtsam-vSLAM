@@ -26,9 +26,9 @@ namespace TII
 
     const std::shared_ptr<Map> mMap;
 
-    void DrawCameraFrame();
+    void GetCameraFrame(std::shared_ptr<glk::ThinLines>& lines);
     void LineFromKeyFrameToCamera();
-    void DrawCamera();
+    void DrawCamera(const Eigen::Matrix4d& cameraPose, const Eigen::Vector4f& color, const std::string& cameraName);
     void DrawPoints();
     void DrawKeyFrames();
 

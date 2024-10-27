@@ -5,6 +5,7 @@
 #include "Map.h"
 #include "Visualization.h"
 #include "FeatureTracker.h"
+#include "OptimizationBA.h"
 #include <thread>
 #include <string>
 
@@ -46,6 +47,8 @@ namespace TII
     std::shared_ptr<FeatureTracker> mFeatureTracker;
     std::shared_ptr<FeatureExtractor> mFeatureExtractorLeft;
     std::shared_ptr<FeatureExtractor> mFeatureExtractorRight;
+    std::shared_ptr<FeatureMatcher> mFeatureMatcher;
+    std::shared_ptr<LocalMapper> mLocalMapper;
     std::shared_ptr<Map> mMap;
     
     SlamMode mMode;

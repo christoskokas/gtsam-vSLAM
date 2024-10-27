@@ -42,10 +42,12 @@ namespace TII
 
   struct IMUData
   {
-    IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk);
+    IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoiseDensity, double accelRandomWalk, int hz);
     const double mGyroNoiseDensity, mGyroRandomWalk, mAccelNoiseDensity, mAccelRandomWalk;
+    const int mHz;
     std::vector<Eigen::Vector3d> mAngleVelocity, mAcceleration;
     std::vector<double> mTimestamps;
+
 
   };
 
@@ -63,8 +65,12 @@ namespace TII
     cv::Mat P = cv::Mat::eye(3,4,CV_64F);
 
     std::shared_ptr<IMUData> mIMUData;
+    Eigen::Vector3d mVelocity {0,0,0};
+    Eigen::Vector3d mNewVelocity {0,0,0};
+    Eigen::Vector3d mIMUGravity {0,0,0};
 
     double fx {},fy {},cx {}, cy {};
+    Eigen::Matrix<double,4,4> TBodyToCam = Eigen::Matrix<double,4,4>::Identity();
     Eigen::Matrix<double,3,3> intrinsics = Eigen::Matrix<double,3,3>::Identity();
     private:
     bool rectified {};

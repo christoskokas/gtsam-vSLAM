@@ -11,12 +11,12 @@ leftPathCam : "/cam0/image_raw"
 rightPathCam : "/cam1/image_raw"
 
 # path to image folder ( if not real-time )
-imagesPath: "/home/christos/Downloads/MH_01_easy/mav0/"
+imagesPath: "/home/christos/Downloads/V1_03_difficult/mav0/"
 
-ImageFileNamePath: "/home/christos/Downloads/MH_01_easy/mav0/cam0/"
+ImageFileNamePath: "/home/christos/Downloads/V1_03_difficult/mav0/cam0/"
 
 IMU:
-  Path: "/home/christos/Downloads/MH_01_easy/mav0/imu0/"
+  Path: "/home/christos/Downloads/V1_03_difficult/mav0/imu0/"
   Hz: 200
   gyroscope_noise_density: 1.6968e-04     # [ rad / s / sqrt(Hz) ]   ( gyro "white noise" )
   gyroscope_random_walk: 1.9393e-05       # [ rad / s^2 / sqrt(Hz) ] ( gyro bias diffusion )
@@ -106,7 +106,6 @@ FE:
   maxFastThreshold: 20
   minFastThreshold: 7
   patchSize: 31
-
 
 # Sensor extrinsics wrt. the body-frame.
 T_bc1:

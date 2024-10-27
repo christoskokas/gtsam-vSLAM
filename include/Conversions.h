@@ -13,7 +13,7 @@
 
 
 
-namespace DC_VSLAM
+namespace TII
 {
 
 struct Converter
@@ -86,7 +86,7 @@ struct Converter
 
 };
 
-} // namespace DC_VSLAM
+} // namespace TII
 
 
 #endif // CONVERSIONS_H

@@ -13,6 +13,7 @@
 #include <string>
 #include <iostream>
 #include <random>
+#include <gtsam/navigation/ImuBias.h>
 
 namespace TII
 {
@@ -28,8 +29,6 @@ class ImageData
 class FeatureTracker
 {
     private :
-
-        std::vector<KeyFrame> keyframes;
 
 
         KeyFrame* latestKF = nullptr;
@@ -65,10 +64,16 @@ class FeatureTracker
 
         std::vector<MapPoint*>& activeMapPoints;
         std::vector<KeyFrame*>& allFrames;
+        std::shared_ptr<IMUData> currentIMUData;
+
+        gtsam::imuBias::ConstantBias initialBias;
 
     public :
 
         FeatureTracker(std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, std::shared_ptr<Map> _map);
+
+        // predict next pose with IMU
+        Eigen::Matrix4d PredictNextPoseIMU();
 
         // main tracking function
         void TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr = nullptr);
