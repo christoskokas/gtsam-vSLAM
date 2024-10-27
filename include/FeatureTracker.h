@@ -43,6 +43,10 @@ class FeatureTracker
         const int maxAddedStereo {100};
         const int minInliers {50};
 
+        const double parallaxThreshold {0.01};
+
+        int numOfMonoMPs {0};
+
         float precCheckMatches {0.9f};
 
         int lastKFTrackedNumb {0};
@@ -68,6 +72,8 @@ class FeatureTracker
 
         gtsam::imuBias::ConstantBias initialBias;
 
+        bool monoInitialized {false};
+
     public :
 
         FeatureTracker(std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, std::shared_ptr<Map> _map);
@@ -78,17 +84,24 @@ class FeatureTracker
         // main tracking function
         void TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr = nullptr);
 
+        // main tracking function Monocular
+        void TrackImageMonoIMU(const cv::Mat& leftRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr = nullptr);
+
         // extract orb features
         void extractORBStereoMatchR(cv::Mat& leftIm, cv::Mat& rightIm, TrackedKeys& keysLeft);
 
         // Initialize map with 3D mappoints
         void initializeMapR(TrackedKeys& keysLeft);
 
+        // Keep the first Keyframe
+        void initializeMono(TrackedKeys& keysLeft);
+
         // set 3D mappoints as outliers
         void setActiveOutliers(std::vector<MapPoint*>& activeMPs, std::vector<bool>& MPsOutliers, std::vector<std::pair<int,int>>& matchesIdxs);
 
         // remove mappoints that are out of frame
         void removeOutOfFrameMPsR(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints);
+        void removeOutOfFrameMPsMono(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints);
 
         // 3d world coords to frame coords
         bool worldToFrameRTrack(MapPoint* mp, const bool right, const Eigen::Matrix4d& predPoseInv, const Eigen::Matrix4d& tempPose);
@@ -99,15 +112,28 @@ class FeatureTracker
         // pose estimation ( GTSAM )
         std::pair<int,int> estimatePoseGTSAM(std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, const bool first);
 
+        // pose estimation for MonoCular ( GTSAM )
+        std::pair<int,int> estimatePoseGTSAMMono(std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, const bool first);
+
 
         // check for outliers after pose estimation
         int findOutliersR(const Eigen::Matrix4d& estimatedP, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, const std::vector<float>& weights, int& nInliers);
+        int findOutliersMono(const Eigen::Matrix4d& estimatedP, std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<std::pair<int,int>>& matchesIdxs, const double thres, std::vector<bool>& MPsOutliers, const std::vector<float>& weights, int& nInliers);
 
         // predict position of 3d mappoints with predicted camera pose
         void newPredictMPs(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers);
 
         // insert KF if needed
         void insertKeyFrameR(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const int nStereo, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm);
+        void insertKeyFrameMono(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm);
+
+        void addMappointsMono(std::vector<MapPoint*>& pointsToAdd, std::vector<KeyFrame *>& actKeyF, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs);
+        bool calculateMPFromMono(Eigen::Vector4d& p4d, std::vector<MapPoint*> pointsToAdd, std::vector<std::pair<KeyFrame*,int>>& keys);
+        void addNewMapPoints(std::vector<MapPoint*>& pointsToAdd);
+
+        // Calculate parallax between 4d poses
+        double calculateParallaxAngle(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2);
+        bool isParallaxSufficient(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2, double threshold = 0.05);
 
         // check 2d Error
         bool check2dError(Eigen::Vector4d& p4d, const cv::Point2f& obs, const double thres, const double weight);
@@ -125,7 +151,7 @@ class FeatureTracker
         void assignKeysToGrids(TrackedKeys& keysLeft, std::vector<cv::KeyPoint>& keypoints,std::vector<std::vector<std::vector<int>>>& keyGrid, const int width, const int height);
 
         // draw tracked keypoints ( TODO move this to the visual thread )
-        void drawKeys(const char* com, cv::Mat& im, std::vector<cv::KeyPoint>& keys, std::vector<bool>& close);
+        void drawKeys(const char* com, cv::Mat& im, std::vector<cv::KeyPoint>& keys);
 
 };
 

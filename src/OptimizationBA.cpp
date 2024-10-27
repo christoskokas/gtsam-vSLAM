@@ -186,7 +186,6 @@ bool LocalMapper::triangulateCeresNew(Eigen::Vector3d& p3d, const std::vector<Ei
     // Create factor graph
     NonlinearFactorGraph graph;
     std::vector<gtsam::Pose3>projectionMatrices;
-    std::vector<gtsam::PinholeCamera<Cal3_S2>>projectionMatricesCams;
     gtsam::Point2Vector observations;
     projectionMatrices.reserve(obs.size());
     observations.reserve(obs.size());
@@ -217,7 +216,6 @@ bool LocalMapper::triangulateCeresNew(Eigen::Vector3d& p3d, const std::vector<Ei
         projectionMatrices.emplace_back(projMat);
 
         // gtsam::PinholeCamera<Cal3_S2> cam1(projMat,K);
-        // projectionMatricesCams.emplace_back(cam1);
         // Add the projection factor to the graph
         Point2 measured(observation[0], observation[1]);
         observations.emplace_back(measured);
@@ -1329,10 +1327,10 @@ void LocalMapper::beginLocalMapping()
             lastKF->getConnectedKFs(actKeyF, actvKFMaxSize);
             
             {
-            triangulateNewPointsR(actKeyF);
+            // triangulateNewPointsR(actKeyF);
             }
             {
-            localBAR(actKeyF);
+            // localBAR(actKeyF);
             }
 
         }

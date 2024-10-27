@@ -171,7 +171,7 @@ int main(int argc, char **argv)
     }
     std::string file = argv[1];
     auto confFile = std::make_shared<TII::ConfigFile>(file.c_str());
-    auto slamSystem = std::make_shared<TII::VSlamSystem>(confFile);
+    auto slamSystem = std::make_shared<TII::VSlamSystem>(confFile,TII::VSlamSystem::SlamMode::MONOCULAR);
 
     std::shared_ptr<TII::StereoCamera> StereoCam;
 
@@ -204,13 +204,11 @@ int main(int argc, char **argv)
     bool imageTimestampsValid = getImageTimestamps(ImageFileNamesVec, imageTimestamps, ImageFileNamePath + "data.csv");
 
     const size_t numberFrames {ImageFileNamesVec.size()};
-    std::vector<std::string>leftImagesStr, rightImagesStr;
+    std::vector<std::string>leftImagesStr;
     leftImagesStr.reserve(numberFrames);
-    rightImagesStr.reserve(numberFrames);
     for ( const auto& imageName : ImageFileNamesVec)
     {
         leftImagesStr.emplace_back(leftPath + imageName);
-        rightImagesStr.emplace_back(rightPath + imageName);
     }
 
     // std::vector < double > tBIMU = confFile->getValue<std::vector<double>>("T_bc1", "data");
@@ -278,7 +276,6 @@ int main(int argc, char **argv)
     {
         cv::Mat R1,R2;
         cv::initUndistortRectifyMap(StereoCam->mCameraLeft->K, StereoCam->mCameraLeft->D, StereoCam->mCameraLeft->R, StereoCam->mCameraLeft->P.rowRange(0,3).colRange(0,3), cv::Size(width, height), CV_32F, rectMap[0][0], rectMap[0][1]);
-        cv::initUndistortRectifyMap(StereoCam->mCameraRight->K, StereoCam->mCameraRight->D, StereoCam->mCameraRight->R, StereoCam->mCameraRight->P.rowRange(0,3).colRange(0,3), cv::Size(width, height), CV_32F, rectMap[1][0], rectMap[1][1]);
     }
 
     // double timeBetFrames = 1.0/StereoCam->mFps;
@@ -288,25 +285,25 @@ int main(int argc, char **argv)
         // auto start = std::chrono::high_resolution_clock::now();
 
         cv::Mat imageLeft = cv::imread(leftImagesStr[frameNumb],cv::IMREAD_COLOR);
-        cv::Mat imageRight = cv::imread(rightImagesStr[frameNumb],cv::IMREAD_COLOR);
 
-        cv::Mat imLRect, imRRect;
+        cv::Mat imLRect;
 
         if ( !StereoCam->rectified )
         {
             cv::remap(imageLeft, imLRect, rectMap[0][0], rectMap[0][1], cv::INTER_LINEAR);
-            cv::remap(imageRight, imRRect, rectMap[1][0], rectMap[1][1], cv::INTER_LINEAR);
         }
         else
         {
             imLRect = imageLeft.clone();
-            imRRect = imageRight.clone();
         }
 
         if (IMUDataValid)
-            slamSystem->TrackStereoIMU(imLRect, imRRect, frameNumb, IMUDataPerFrame[frameNumb]);
+            slamSystem->TrackMonoIMU(imLRect, frameNumb, IMUDataPerFrame[frameNumb]);
         else
-            slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
+        {
+            std::cout << "Monocular requires IMU" << std::endl;
+            return -1;
+        }
 
 
         // auto end = std::chrono::high_resolution_clock::now();

@@ -15,19 +15,21 @@ namespace TII
   class VSlamSystem
   {
 
-    enum class SlamMode
-    {
-      STEREO,
-      MONOCULAR
-    };
 
     public:
+    
+      enum class SlamMode
+      {
+        STEREO,
+        MONOCULAR
+      };
+
       VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode mode = SlamMode::STEREO);
       void InitializeMonocular();
       void InitializeStereo();
       void GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera);
       void StartSystem();
-      void TrackMonoCular();
+      void TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, const IMUData& IMUDataVal);
       void TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb);
       void TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUData);
       void ExitSystem();

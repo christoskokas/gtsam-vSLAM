@@ -44,10 +44,11 @@ void Visualizer::LineFromKeyFrameToCamera()
 
 }
 
-void Visualizer::DrawCamera(const Eigen::Matrix4d& cameraPose, const Eigen::Vector4f& color, const std::string& cameraName)
+void Visualizer::DrawCamera(const Eigen::Matrix4d& cameraPose, const Eigen::Vector4f& color, const std::string& cameraName, float width)
 {
   std::shared_ptr<glk::ThinLines> lines;
   GetCameraFrame(lines);
+  lines->set_line_width(width);
   auto transformation = cameraPose;
   auto line_settings = guik::FlatColor( color, transformation); 
 
@@ -106,7 +107,7 @@ void Visualizer::DrawKeyFrames()
         if (!(*it).second->visualize)
             continue;
         Eigen::Matrix4d keyPose = (*it).second->getPose();
-        DrawCamera(keyPose, {0.0f, 0.0f, 1.0f, 1.0f}, "keyframe_" + std::to_string(it->second->numb));
+        DrawCamera(keyPose, {0.0f, 0.0f, 1.0f, 1.0f}, "keyframe_" + std::to_string(it->second->numb), 0.5f);
 
     }
 }
@@ -139,7 +140,7 @@ void Visualizer::RenderScene() {
   while (mViewer->spin_once()) 
   {
     DrawPoints();
-    DrawCamera(mStereoCamera->mCameraPose.getPose(), {1.0f, 1.0f, 0.0f, 1.0f}, "Current Camera");
+    DrawCamera(mStereoCamera->mCameraPose.getPose(), {1.0f, 1.0f, 0.0f, 1.0f}, "Current Camera", 5.0f);
     DrawKeyFrames();
 
     const Eigen::Vector3f cameraPos(mStereoCamera->mCameraPose.getPose().block<3,1>(0,3).cast<float>());

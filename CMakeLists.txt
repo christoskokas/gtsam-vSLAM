@@ -184,6 +184,9 @@ gtsam
 add_executable(VIOSlam src/VIOSlam.cpp)
 target_link_libraries(VIOSlam ${PROJECT_NAME})
 
+add_executable(VIOSlamMono src/VIOSlamMono.cpp)
+target_link_libraries(VIOSlamMono ${PROJECT_NAME})
+
 
 # add_executable(DualCam src/DualCam.cpp)
 # target_link_libraries(DualCam ${PROJECT_NAME})

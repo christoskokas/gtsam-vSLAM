@@ -56,6 +56,12 @@ class FeatureMatcher
         // match by projection ( frame to frame )
         int matchByProjectionRPred(std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, const float rad);
 
+        // match Features for Mono( frame to frame )
+        int matchByProjectionMono(std::vector<MapPoint*>& activeMapPoints, TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const float rad);
+
+        // match Features for Mono Initialization By Radius( frame to frame )
+        int matchByRadius(TrackedKeys& lastKeys, TrackedKeys& actKeys, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const float rad, std::vector<std::vector<std::pair<KeyFrame*,int>>>& keyframeIdxMatchs, KeyFrame* actKeyFrame);
+
 };
 
 } // namespace TII

@@ -41,6 +41,21 @@ void MapPoint::addConnection(KeyFrame* kF, const std::pair<int,int>& keyPos)
     }
 }
 
+void MapPoint::addConnectionMono(KeyFrame* kF, const std::pair<int,int>& keyPos)
+{
+    std::cout << "first : " << keyPos.first << " " << keyPos.second << std::endl;
+    if ( kFMatches.find(kF) == kFMatches.end() )
+        kFMatches.insert(std::pair<KeyFrame*, std::pair<int,int>>(kF, keyPos));
+    else
+        kFMatches[kF] = keyPos;
+
+    if ( keyPos.first >= 0 )
+    {
+        kF->localMapPoints[keyPos.first] = this;
+        kF->unMatchedF[keyPos.first] = kdx;
+    }
+}
+
 void MapPoint::update(KeyFrame* kF)
 {
     lastObsKF = kF;

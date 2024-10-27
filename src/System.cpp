@@ -16,12 +16,10 @@ VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode 
   {
     InitializeStereo();
     mLocalMapper = std::make_shared<LocalMapper>(mMap, mStereoCamera, mFeatureMatcher);
+    mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);
   }
 
   
-  // mFeatureTracker = std::shared_ptr<FeatureTracker>();
-  mFeatureTrackingThread = {};
-  mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);;
   mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
   mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
 }
@@ -29,9 +27,10 @@ VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode 
 void VSlamSystem::InitializeMonocular()
 {
   mMonoCamera = std::make_shared<Camera>(mConfigFile, "Camera_l");
+  mStereoCamera = std::make_shared<StereoCamera>(mConfigFile, mMonoCamera, nullptr);
   mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
   mFeatureMatcher = std::make_shared<FeatureMatcher>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorLeft);
-  // mFeatureTracker = std::shared_ptr<FeatureTracker>();
+  mFeatureTracker = std::make_shared<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
   std::cout << "Monocular Camera Initialized.." << std::endl;
 }
 
@@ -83,11 +82,6 @@ void VSlamSystem::ExitSystem()
   mVisualizationThread.join();
 }
 
-void VSlamSystem::TrackMonoCular()
-{
-
-}
-
 void VSlamSystem::TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb)
 {
   mFeatureTracker->TrackImageT(imLRect, imRRect, frameNumb);
@@ -96,6 +90,11 @@ void VSlamSystem::TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, co
 void VSlamSystem::TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUDataVal)
 {
   mFeatureTracker->TrackImageT(imLRect, imRRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
+}
+
+void VSlamSystem::TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, const IMUData& IMUDataVal)
+{
+  mFeatureTracker->TrackImageMonoIMU(imLRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
 }
 
 void VSlamSystem::SaveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition)
