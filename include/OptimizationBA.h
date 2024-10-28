@@ -66,17 +66,11 @@ class LocalMapper
         void localBA(std::vector<KeyFrame *>& actKeyF);
 
         // check the reprojection error between matched keypoints (from triangulation)
-        bool checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, std::vector<Eigen::Vector2d>& pointsVec);
+        bool checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix4d>& observationPoses, const std::vector<Eigen::Vector2d>& pointsVec);
 
         // set the ordering for the GTSAM Optimization
-        void setOrdering(gtsam::Ordering& ordering, const std::unordered_map<KeyFrame*, Eigen::Matrix4d>& localKFs, const std::unordered_map<MapPoint*, Eigen::Vector3d> allMapPoints);
+        void setOrdering(gtsam::Ordering& ordering, const std::vector<int>& localKFNumbs, const std::vector<int>& mpNumbs);
         
-        // calculate projection matrices for triangulation
-        void calcProjMatricesR(std::unordered_map<KeyFrame*, std::pair<Eigen::Matrix<double,3,4>,Eigen::Matrix<double,3,4>>>& projMatrices, std::vector<KeyFrame*>& actKeyF);
-
-        // process matches to find the optimized 3D position of the mappoint
-        void processMatchesR(std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, std::unordered_map<KeyFrame*, std::pair<Eigen::Matrix<double,3,4>,Eigen::Matrix<double,3,4>>>& allProjMatrices, std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, std::vector<Eigen::Vector2d>& points);
-
         // add optimized mappoints to vector for insertion to the map
         void addMultiViewMapPointsR(const Eigen::Vector4d& posW, const std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, std::vector<MapPoint*>& pointsToAdd, KeyFrame* lastKF, const size_t& mpPos);
 
@@ -91,7 +85,7 @@ class LocalMapper
 
         // local BA check
         void beginLocalMapping();
-        bool triangulateNewPoints(Eigen::Vector3d& p3d, const std::vector<std::pair<KeyFrame*,std::pair<int, int>>>& matchesOfPoint);
+        bool triangulateNewPoints(Eigen::Vector4d& p4d, KeyFrame* lastKF, std::vector<std::pair<KeyFrame*,std::pair<int, int>>>& matchesOfPoint);
 
 };
 

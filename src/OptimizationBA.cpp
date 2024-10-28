@@ -10,58 +10,12 @@ LocalMapper::LocalMapper(std::shared_ptr<Map> _map, std::shared_ptr<StereoCamera
 
 }
 
-void LocalMapper::calcProjMatricesR(std::unordered_map<KeyFrame*, std::pair<Eigen::Matrix<double,3,4>,Eigen::Matrix<double,3,4>>>& projMatrices, std::vector<KeyFrame*>& actKeyF)
-{
-
-    Eigen::Matrix<double,3,3>& K = zedPtr->mCameraLeft->intrinsics;
-    Eigen::Matrix4d projL = Eigen::Matrix4d::Identity();
-    projL.block<3,3>(0,0) = K;
-    Eigen::Matrix4d projR = Eigen::Matrix4d::Identity();
-    projR.block<3,3>(0,0) = K;
-    std::vector<KeyFrame*>::const_iterator it, end(actKeyF.end());
-    for ( it = actKeyF.begin(); it != end; it++)
-    {
-        Eigen::Matrix<double,4,4> extr2 = (*it)->pose.poseInverse;
-        extr2 = projL * extr2;
-        Eigen::Matrix<double,3,4> extr = extr2.block<3,4>(0,0);
-        Eigen::Matrix<double,4,4> extrRight = ((*it)->pose.pose * zedPtr->extrinsics).inverse();
-        extrRight =  projR * extrRight;
-        Eigen::Matrix<double,3,4> extrR = extrRight.block<3,4>(0,0);
-        projMatrices.emplace(*it, std::make_pair(extr, extrR));
-    }
-}
-
-void LocalMapper::processMatchesR(std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, std::unordered_map<KeyFrame*, std::pair<Eigen::Matrix<double,3,4>,Eigen::Matrix<double,3,4>>>& allProjMatrices, std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, std::vector<Eigen::Vector2d>& points)
-{
-    proj_matrices.reserve(matchesOfPoint.size());
-    points.reserve(matchesOfPoint.size());
-    std::vector<std::pair<KeyFrame *, std::pair<int, int>>>::const_iterator it, end(matchesOfPoint.end());
-    for ( it = matchesOfPoint.begin(); it != end; it++)
-    {
-        KeyFrame* kF = it->first;
-        const TrackedKeys& keys = kF->keys;
-        const std::pair<int,int>& keyPos = it->second;
-        if ( keyPos.first >= 0 )
-        {
-            Eigen::Vector2d vec2d((double)keys.keyPoints[keyPos.first].pt.x, (double)keys.keyPoints[keyPos.first].pt.y);
-            points.emplace_back(vec2d);
-            proj_matrices.emplace_back(allProjMatrices.at(kF).first);
-        }
-
-        if ( keyPos.second >= 0 )
-        {
-            Eigen::Vector2d vec2d((double)keys.rightKeyPoints[keyPos.second].pt.x, (double)keys.rightKeyPoints[keyPos.second].pt.y);
-            points.emplace_back(vec2d);
-            proj_matrices.emplace_back(allProjMatrices.at(kF).second);
-        }
-    }
-}
-
-bool LocalMapper::checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, std::vector<Eigen::Vector2d>& pointsVec)
+bool LocalMapper::checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix4d>& observationPoses, const std::vector<Eigen::Vector2d>& observations)
 {
     int count {0};
     bool correctKF {false};
     const unsigned long lastKFNumb = lastKF->numb;
+    const auto& K = zedPtr->mCameraLeft->intrinsics;
     int projCount {0};
     for (size_t i {0}, end{matchesOfPoint.size()}; i < end; i++)
     {
@@ -74,11 +28,12 @@ bool LocalMapper::checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, s
         bool cor {false};
         if ( keyPos.first >= 0 )
         {
-            Eigen::Vector3d p3dnew = proj_matrices[projCount] * calcVec;
-            p3dnew = p3dnew/p3dnew(2);
+            const auto& projMat = K * observationPoses[projCount].block<3,4>(0,0);
+            Eigen::Vector3d p3dnew = projMat * calcVec;
+            p3dnew = p3dnew / p3dnew(2);
             double err1,err2;
-            err1 = pointsVec[projCount](0) - p3dnew(0);
-            err2 = pointsVec[projCount](1) - p3dnew(1);
+            err1 = observations[projCount](0) - p3dnew(0);
+            err2 = observations[projCount](1) - p3dnew(1);
             const int oct = keys.keyPoints[keyPos.first].octave;
             const double weight = (double)kFCand->sigmaFactor[oct];
             float err = err1*err1 + err2*err2;
@@ -98,11 +53,12 @@ bool LocalMapper::checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, s
         }
         if ( keyPos.second >= 0 )
         {
-            Eigen::Vector3d p3dnew = proj_matrices[projCount] * calcVec;
-            p3dnew = p3dnew/p3dnew(2);
+            const auto& projMat = K * observationPoses[projCount].block<3,4>(0,0);
+            Eigen::Vector3d p3dnew = projMat * calcVec;
+            p3dnew = p3dnew / p3dnew(2);
             double err1,err2;
-            err1 = pointsVec[projCount](0) - p3dnew(0);
-            err2 = pointsVec[projCount](1) - p3dnew(1);
+            err1 = observations[projCount](0) - p3dnew(0);
+            err2 = observations[projCount](1) - p3dnew(1);
             const int oct = keys.rightKeyPoints[keyPos.second].octave;
             const double weight = lastKF->sigmaFactor[oct];
             float err = err1*err1 + err2*err2;
@@ -167,21 +123,30 @@ void LocalMapper::addMultiViewMapPointsR(const Eigen::Vector4d& posW, const std:
     pointsToAdd[mpPos] = mp;
 }
 
-bool LocalMapper::triangulateNewPoints(Eigen::Vector3d& p3d, const std::vector<std::pair<KeyFrame*,std::pair<int, int>>>& matchesOfPoint)
+bool LocalMapper::triangulateNewPoints(Eigen::Vector4d& p4d, KeyFrame* lastKF, std::vector<std::pair<KeyFrame*,std::pair<int, int>>>& matchesOfPoint)
 {
     using namespace gtsam;
 
-    std::vector<gtsam::Pose3>activePoses3;
-    gtsam::Point2Vector observations;
-    activePoses3.reserve(matchesOfPoint.size());
+    std::vector<gtsam::Pose3>observationPoses3;
+    std::vector<Eigen::Matrix4d>observationPoses;
+    gtsam::Point2Vector observations2;
+    std::vector<Eigen::Vector2d> observations;
+    observationPoses3.reserve(matchesOfPoint.size());
     observations.reserve(matchesOfPoint.size());
+    observations2.reserve(matchesOfPoint.size());
+    observationPoses.reserve(matchesOfPoint.size());
     auto K = boost::make_shared<Cal3_S2>(fx, fy, 0, cx, cy);  
     const auto& extrinsics = zedPtr->extrinsics;
+    std::pair<int, int> lastKFKey;
 
     std::vector<std::pair<KeyFrame *, std::pair<int, int>>>::const_iterator it, end(matchesOfPoint.end());
     for ( it = matchesOfPoint.begin(); it != end; it++)
     {
         KeyFrame* kF = it->first;
+        if (kF->numb == lastKF->numb)
+        {
+            lastKFKey = it->second;
+        }
         const auto& kFPoseInv = kF->pose.pose;
         const auto& kFPoseRInv = (kF->pose.pose * extrinsics);
         const TrackedKeys& keys = kF->keys;
@@ -189,31 +154,36 @@ bool LocalMapper::triangulateNewPoints(Eigen::Vector3d& p3d, const std::vector<s
         if ( keyPos.first >= 0 )
         {
             Eigen::Vector2d vec2d((double)keys.keyPoints[keyPos.first].pt.x, (double)keys.keyPoints[keyPos.first].pt.y);
+            observations2.emplace_back(vec2d);
             observations.emplace_back(vec2d);
 
             gtsam::Pose3 gtsamPose(
                 gtsam::Rot3(kFPoseInv.block<3, 3>(0, 0)),
                 gtsam::Point3(kFPoseInv.block<3, 1>(0, 3))
             );
-            activePoses3.emplace_back(gtsamPose);
+            observationPoses3.emplace_back(gtsamPose);
+            observationPoses.emplace_back(kF->pose.poseInverse);
         }
 
         if ( keyPos.second >= 0 )
         {
             Eigen::Vector2d vec2d((double)keys.rightKeyPoints[keyPos.second].pt.x, (double)keys.rightKeyPoints[keyPos.second].pt.y);
+            observations2.emplace_back(vec2d);
             observations.emplace_back(vec2d);
+
             gtsam::Pose3 gtsamPose(
                 gtsam::Rot3(kFPoseRInv.block<3, 3>(0, 0)),
                 gtsam::Point3(kFPoseRInv.block<3, 1>(0, 3))
             );
-            activePoses3.emplace_back(gtsamPose);
+            observationPoses3.emplace_back(gtsamPose);
+            observationPoses.emplace_back(kFPoseRInv.inverse());
         }
     }
 
     std::optional<gtsam::Point3> resu;
     try
     {
-        resu = gtsam::triangulatePoint3<Cal3_S2>(activePoses3, K,observations);
+        resu = gtsam::triangulatePoint3<Cal3_S2>(observationPoses3, K,observations2);
     }
     catch(const gtsam::TriangulationCheiralityException& e)
     {
@@ -227,10 +197,12 @@ bool LocalMapper::triangulateNewPoints(Eigen::Vector3d& p3d, const std::vector<s
     if (resu.has_value())
     {
         gtsam::Point3 p3 = resu.value();
-        p3d(0) = p3.x();
-        p3d(1) = p3.y();
-        p3d(2) = p3.z();
-        return true;
+        p4d(0) = p3.x();
+        p4d(1) = p3.y();
+        p4d(2) = p3.z();
+        p4d(3) = 1.0f;
+        if (checkReprojError(lastKF, p4d, matchesOfPoint, observationPoses, observations))
+            return true;
     }
     return false;
 }
@@ -383,22 +355,17 @@ void LocalMapper::findNewPoints(std::vector<KeyFrame *>& activeKF)
     {
         if ( (*it)->numb == lastKFIdx)
             continue;
+        // if (!Converter::isParallaxSufficient(lastKF->pose.pose, (*it)->pose.pose, Converter::parallaxThreshold))
+        //     continue;
+        if (!Converter::checkSufficientMovement(lastKF->pose.pose, (*it)->pose.pose))
+            continue;
+        // std::cout << "check : " << Converter::checkSufficientMovement(lastKF->pose.pose, (*it)->pose.pose) << std::endl;
         std::vector<std::pair<cv::Point2f, cv::Point2f>> predPoints;
         // predict keys for both right and left camera
         predictKeysPosR(lastKF->keys, (*it)->pose.pose, (*it)->pose.poseInverse, p4d, predPoints);
         fm->matchByProjectionRPredLBA(lastKF, (*it), matchedIdxs, 4, predPoints, maxDistsScale, p4d);
         
     }
-    }
-
-    std::unordered_map<KeyFrame*, std::pair<Eigen::Matrix<double,3,4>,Eigen::Matrix<double,3,4>>> allProjMatrices;
-    allProjMatrices.reserve(2 * actKeyF.size());
-    calcProjMatricesR(allProjMatrices, actKeyF);
-
-    std::vector<Eigen::Matrix4d> activePoses;
-    for (const auto& kf : actKeyF)
-    {
-        activePoses.emplace_back(kf->getPose());
     }
     
     std::vector<MapPoint*> pointsToAdd;
@@ -410,16 +377,9 @@ void LocalMapper::findNewPoints(std::vector<KeyFrame *>& activeKF)
         std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint = matchedIdxs[i];
         if ((int)matchesOfPoint.size() < minCount)
             continue;
-        // std::vector<Eigen::Matrix<double, 3, 4>> proj_mat;
-        // std::vector<Eigen::Vector2d> pointsVec;
-        // processMatchesR(matchesOfPoint, allProjMatrices, proj_mat, pointsVec);
-        Eigen::Vector3d vec3d;
-        if (!triangulateNewPoints(vec3d, matchesOfPoint))
+        Eigen::Vector4d vec4d;
+        if (!triangulateNewPoints(vec4d, lastKF, matchesOfPoint))
             continue;
-        Eigen::Vector4d vec4d{vec3d.x(), vec3d.y(),vec3d.z(), 1.0};
-
-        // if ( !checkReprojError(lastKF, vec3d, matchesOfPoint, proj_mat, pointsVec) )
-        //     continue;
 
         addMultiViewMapPointsR(vec4d, matchesOfPoint, pointsToAdd, lastKF, i);
         newMaPoints++;
@@ -582,6 +542,8 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
     const Eigen::Matrix3d qc1c2 = estimPoseRInv.block<3,3>(0,0);
     const Eigen::Matrix<double,3,1> tc1c2 = estimPoseRInv.block<3,1>(0,3);
 
+    std::vector<int>kFNumbs;
+    std::vector<int>mpNumbs;
 
     // Add Factors to the problem
     // Iterate through mappoints, add mappoints and their matched KFs
@@ -639,7 +601,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
 
                 // Add landmark initial estimate
                 if (!initialEstimate.exists(gtsam::Symbol('l', itmp->first->idx))) 
+                {
                     initialEstimate.insert(gtsam::Symbol('l', itmp->first->idx), gtsamPoint);
+                    mpNumbs.emplace_back(itmp->first->idx);
+                }
 
                 close = keys.close[keyPos.first];
             }
@@ -657,7 +622,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                     observation, noiseModel, gtsam::Symbol('x', kf->first->numb), gtsam::Symbol('l', itmp->first->idx), K, gtsamExtrinsics);
 
                 if (!initialEstimate.exists(gtsam::Symbol('l', itmp->first->idx))) 
+                {
                     initialEstimate.insert(gtsam::Symbol('l', itmp->first->idx), gtsamPoint);
+                    mpNumbs.emplace_back(itmp->first->idx);
+                }
             }
 
             if (localKFs.find(kf->first) != localKFs.end())
@@ -672,7 +640,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                 graph.add(factor);
 
                 if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
+                {
                     initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
+                    kFNumbs.emplace_back(kf->first->numb);
+                }
                 if ( kf->first->fixed )
                 {
                     graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
@@ -690,7 +661,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                 graph.add(factor);
                 
                 if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
+                {
                     initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
+                    kFNumbs.emplace_back(kf->first->numb);
+                }
                 graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
             }
             else
@@ -716,7 +690,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
 
                 // Add landmark initial estimate
                 if (!initialEstimate.exists(gtsam::Symbol('l', itmp->first->idx))) 
+                {
                     initialEstimate.insert(gtsam::Symbol('l', itmp->first->idx), gtsamPoint);
+                    mpNumbs.emplace_back(itmp->first->idx);
+                }
 
                 if (localKFs.find(kf->first) != localKFs.end())
                 {
@@ -727,7 +704,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                         gtsam::Point3(kfPoseInv.block<3, 1>(0, 3))
                     );
                     if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
+                    {
                         initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
+                        kFNumbs.emplace_back(kf->first->numb);
+                    }
                     
                     if ( kf->first->fixed )
                     {
@@ -744,7 +724,10 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                     );
                     
                     if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
+                    {
                         initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
+                        kFNumbs.emplace_back(kf->first->numb);
+                    }
                     graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
                 }
             }
@@ -754,15 +737,15 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
             mpOutliers[mpCount] = true;
     }
     
-    // gtsam::Ordering ordering;
-    // setOrdering(ordering, localKFs, allMapPoints);
+    gtsam::Ordering ordering;
+    setOrdering(ordering, kFNumbs, mpNumbs);
     gtsam::LevenbergMarquardtParams params;
     params.maxIterations = 10;
     params.relativeErrorTol = 1e-5;
     params.absoluteErrorTol = 1e-5;
     try
     {
-        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, params);
+        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, ordering, params);
         result = optimizer.optimize();
     }
     catch(const gtsam::IndeterminantLinearSystemException& e)
@@ -932,16 +915,16 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
     
 }
 
-void LocalMapper::setOrdering(gtsam::Ordering& ordering, const std::unordered_map<KeyFrame*, Eigen::Matrix4d>& localKFs, const std::unordered_map<MapPoint*, Eigen::Vector3d> allMapPoints)
+void LocalMapper::setOrdering(gtsam::Ordering& ordering, const std::vector<int>& localKFNumbs, const std::vector<int>& mpNumbs)
 {
-    for (const auto& [mp, vec] : allMapPoints)
+    for (const auto& mpNumb : mpNumbs)
     {
-        ordering.push_back(gtsam::Symbol('l',mp->idx));
+        ordering.push_back(gtsam::Symbol('l', mpNumb));
     }
 
-    for (const auto& [kf, vec] : localKFs)
+    for (const auto& kfNumb : localKFNumbs)
     {
-        ordering.push_back(gtsam::Symbol('x',kf->numb));
+        ordering.push_back(gtsam::Symbol('x', kfNumb));
     }
 }
 

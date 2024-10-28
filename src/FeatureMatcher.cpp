@@ -1,4 +1,6 @@
 #include "FeatureMatcher.h"
+#include "Conversions.h"
+
 
 namespace GTSAM_VIOSLAM
 {
@@ -203,9 +205,19 @@ int FeatureMatcher::matchByProjectionRPredLBA(const KeyFrame* lastKF, KeyFrame* 
             continue;
         if (bestLev != bestLev2 || bestDist < ratioLBA * secDist)
         {
-            nMatches ++;
+            
             if ( right )
             {
+                Eigen::Vector2d lastKFKeyPoint;
+                if (keyPair.second >= 0)
+                    lastKFKeyPoint = {lastKeys.rightKeyPoints[keyPair.second].pt.x, lastKeys.rightKeyPoints[keyPair.second].pt.y};
+                else
+                    lastKFKeyPoint = {lastKeys.keyPoints[keyPair.first].pt.x, lastKeys.keyPoints[keyPair.first].pt.y};
+
+                Eigen::Vector2d predKeyPoint = {pRight.x, pRight.y};
+
+                if (!Converter::checkPixelParallax(lastKFKeyPoint,predKeyPoint))
+                    continue;
                 int rIdx {bestIdxR}, lIdx {-1};
                 if ( keysLeft.leftIdxs[bestIdxR] >= 0 )
                 {
@@ -216,14 +228,24 @@ int FeatureMatcher::matchByProjectionRPredLBA(const KeyFrame* lastKF, KeyFrame* 
             }
             else
             {
+                Eigen::Vector2d lastKFKeyPoint;
+                if (keyPair.first >= 0)
+                    lastKFKeyPoint = {lastKeys.keyPoints[keyPair.first].pt.x, lastKeys.keyPoints[keyPair.first].pt.y};
+                else
+                    lastKFKeyPoint = {lastKeys.rightKeyPoints[keyPair.second].pt.x, lastKeys.rightKeyPoints[keyPair.second].pt.y};
+
+                Eigen::Vector2d predKeyPoint = {pLeft.x, pLeft.y};
+
+                if (!Converter::checkPixelParallax(lastKFKeyPoint,predKeyPoint))
+                    continue;
                 int rIdx {-1}, lIdx {bestIdx};
                 if ( keysLeft.rightIdxs[bestIdx] >= 0 )
                 {
                     rIdx = keysLeft.rightIdxs[bestIdx];
                 }
                 matchedIdxs[i].emplace_back(std::make_pair(newKF, std::make_pair(lIdx,rIdx)));
-
             }
+            nMatches ++;
         }
     }
     return nMatches;
