@@ -1,6 +1,6 @@
 #include "FeatureMatcher.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 FeatureMatcher::FeatureMatcher(const std::shared_ptr<StereoCamera> _zed, const std::shared_ptr<FeatureExtractor> _feLeft, const std::shared_ptr<FeatureExtractor> _feRight, const int _imageHeight) : zedptr(_zed), feLeft(_feLeft), feRight(_feRight), imageHeight(_imageHeight)
@@ -723,4 +723,4 @@ void FeatureMatcher::destributeRightKeys(const std::vector < cv::KeyPoint >& rig
 
 }
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

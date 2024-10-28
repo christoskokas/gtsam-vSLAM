@@ -12,7 +12,7 @@
 #include <glk/pointcloud_buffer.hpp>
 #include <glk/thin_lines.hpp>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
   class Visualizer
@@ -36,7 +36,7 @@ namespace TII
     void RenderScene();
   };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // VISUALIZATION_H

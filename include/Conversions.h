@@ -13,7 +13,7 @@
 
 
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 struct Converter
@@ -86,7 +86,7 @@ struct Converter
 
 };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // CONVERSIONS_H

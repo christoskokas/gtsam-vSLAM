@@ -1,6 +1,6 @@
 #include "Settings.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 ConfigFile::ConfigFile(const char* config /*= "config.yaml"*/) : configPath(config)
@@ -19,4 +19,4 @@ ConfigFile::ConfigFile(const char* config /*= "config.yaml"*/) : configPath(conf
 }
 
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

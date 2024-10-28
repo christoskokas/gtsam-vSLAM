@@ -12,7 +12,7 @@
 #include <future>
 #include <numeric>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 struct TrackedKeys
@@ -96,7 +96,7 @@ class FeatureExtractor
     
 };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // FEATUREEXTRACTOR_H

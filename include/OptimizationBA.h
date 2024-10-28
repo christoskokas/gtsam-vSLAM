@@ -9,14 +9,23 @@
 #include "FeatureMatcher.h"
 #include "Conversions.h"
 #include "Settings.h"
-#include "Optimizer.h"
 #include "Eigen/Dense"
 #include <fstream>
 #include <string>
 #include <iostream>
 #include <random>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/slam/ProjectionFactor.h>
+#include <gtsam/geometry/PinholeCamera.h>
+#include <gtsam/nonlinear/NonlinearEquality.h>
+#include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/geometry/Point3.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/geometry/triangulation.h>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 
@@ -28,34 +37,24 @@ class LocalMapper
 
         bool stopRequested {false};
 
-
+        // the map
         std::shared_ptr<Map> map;
 
+        // reprojection threshold to find outliers
         const float reprjThreshold {7.815f};
 
         const int actvKFMaxSize {10};
         const int minCount {3};
 
         std::shared_ptr<StereoCamera> zedPtr;
-        std::shared_ptr<StereoCamera> zedPtrB;
 
         std::shared_ptr<FeatureMatcher> fm;
         const double fx,fy,cx,cy;
 
         LocalMapper(std::shared_ptr<Map> _map, std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureMatcher> _fm);
 
-        // loop closure optimization
-        // void loopClosureR(std::vector<KeyFrame *>& actKeyF);
-
-        // loop closure check
-        // void beginLoopClosure();
-
-        // insert MPs from localMapPoints for optimization
-        void insertMPsForLBA(std::vector<MapPoint*>& localMapPoints, const std::unordered_map<KeyFrame*, Eigen::Matrix<double,7,1>>& localKFs,std::unordered_map<KeyFrame*, Eigen::Matrix<double,7,1>>& fixedKFs, std::unordered_map<MapPoint*, Eigen::Vector3d>& allMapPoints, const unsigned long lastActKF, int& blocks, const bool back);
-        void insertMPsForLC(std::vector<MapPoint*>& localMapPoints, const std::unordered_map<KeyFrame*, Eigen::Matrix<double,7,1>>& localKFs, std::unordered_map<MapPoint*, Eigen::Vector3d>& allMapPoints, const unsigned long lastActKF, int& blocks, const bool back);
-        
         // triangulate new points from connected keyframes
-        void triangulateNewPointsR(std::vector<KeyFrame *>& activeKF);
+        void findNewPoints(std::vector<KeyFrame *>& activeKF);
         
         // find all keypoints that have a stereo match for triangulating new points
         void calcAllMpsOfKFROnlyEst(std::vector<std::vector<std::pair<KeyFrame*,std::pair<int, int>>>>& matchedIdxs, KeyFrame* lastKF, const int kFsize, std::vector<std::pair<Eigen::Vector4d,std::pair<int,int>>>& p4d, std::vector<float>& maxDistsScale);
@@ -64,11 +63,13 @@ class LocalMapper
         void predictKeysPosR(const TrackedKeys& keys, const Eigen::Matrix4d& camPose, const Eigen::Matrix4d& camPoseInv, const std::vector<std::pair<Eigen::Vector4d,std::pair<int,int>>>& p4d, std::vector<std::pair<cv::Point2f, cv::Point2f>>& predPoints);
 
         // local BA optimization
-        void localBAR(std::vector<KeyFrame *>& actKeyF);
+        void localBA(std::vector<KeyFrame *>& actKeyF);
 
         // check the reprojection error between matched keypoints (from triangulation)
-        bool checkReprojErrNewR(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, std::vector<Eigen::Vector2d>& pointsVec);
+        bool checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, std::vector<Eigen::Vector2d>& pointsVec);
 
+        // set the ordering for the GTSAM Optimization
+        void setOrdering(gtsam::Ordering& ordering, const std::unordered_map<KeyFrame*, Eigen::Matrix4d>& localKFs, const std::unordered_map<MapPoint*, Eigen::Vector3d> allMapPoints);
         
         // calculate projection matrices for triangulation
         void calcProjMatricesR(std::unordered_map<KeyFrame*, std::pair<Eigen::Matrix<double,3,4>,Eigen::Matrix<double,3,4>>>& projMatrices, std::vector<KeyFrame*>& actKeyF);
@@ -85,17 +86,18 @@ class LocalMapper
         
         // check if mappoint is outlier
         bool checkOutlier(const Eigen::Matrix3d& K, const Eigen::Vector2d& obs, const Eigen::Vector3d posW,const Eigen::Vector3d& tcw, const Eigen::Quaterniond& qcw, const float thresh);
+        // check if mappoint is outlier
         bool checkOutlierR(const Eigen::Matrix3d& K, const Eigen::Matrix3d& qc1c2, const Eigen::Matrix<double,3,1>& tc1c2, const Eigen::Vector2d& obs, const Eigen::Vector3d posW,const Eigen::Vector3d& tcw, const Eigen::Quaterniond& qcw, const float thresh);
 
         // local BA check
         void beginLocalMapping();
-        bool triangulateCeresNew(Eigen::Vector3d& p3d, const std::vector<Eigen::Matrix<double, 3, 4>>& proj_matrices, const std::vector<Eigen::Vector2d>& obs, const Eigen::Matrix4d& lastKFPose, bool first, std::vector<Eigen::Matrix4d>& activePoses);
+        bool triangulateNewPoints(Eigen::Vector3d& p3d, const std::vector<std::pair<KeyFrame*,std::pair<int, int>>>& matchesOfPoint);
 
 };
 
 
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // OPTIMIZATIONBA_H

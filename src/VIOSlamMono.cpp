@@ -109,75 +109,22 @@ bool getImageTimestamps(std::vector<std::string>& fileNameVec, std::vector<doubl
     return true;
 }
 
-// Function to transform IMU data to camera frame
-void transformIMUToCameraFrame(
-    const Eigen::Vector3d& angular_velocity_imu,  // Angular velocity in IMU frame
-    const Eigen::Vector3d& linear_acceleration_imu, // Linear acceleration in IMU frame
-    const Eigen::Matrix3d& R_imu_to_cam,           // Rotation matrix from IMU to camera frame
-    const Eigen::Vector3d& t_imu_to_cam,           // Translation vector from IMU to camera frame
-    Eigen::Vector3d& angular_velocity_cam,         // Transformed angular velocity in camera frame
-    Eigen::Vector3d& linear_acceleration_cam       // Transformed linear acceleration in camera frame
-) {
-    // Transform angular velocity to the camera frame
-    angular_velocity_cam = R_imu_to_cam * angular_velocity_imu;
-
-    // Compute the cross-product terms for linear acceleration transformation
-    Eigen::Vector3d omega_cross_r = angular_velocity_cam.cross(t_imu_to_cam);
-    Eigen::Vector3d omega_cross_omega_cross_r = angular_velocity_cam.cross(omega_cross_r);
-
-    // Transform linear acceleration to the camera frame
-    linear_acceleration_cam = R_imu_to_cam * (linear_acceleration_imu - omega_cross_omega_cross_r);
-}
-
-// Function to transform IMU data to camera frame
-void transformIMUToCameraFrame2(
-    const Eigen::Vector3d& angular_velocity_imu,  // Angular velocity in IMU frame
-    const Eigen::Vector3d& linear_acceleration_imu, // Linear acceleration in IMU frame
-    const Eigen::Matrix4d& T_imu_to_cam, 
-    Eigen::Vector3d& angular_velocity_cam,         // Transformed angular velocity in camera frame
-    Eigen::Vector3d& linear_acceleration_cam       // Transformed linear acceleration in camera frame
-) {
-    // Transform angular velocity to the camera frame
-    Eigen::Vector4d angV4(angular_velocity_imu(0), angular_velocity_imu(1), angular_velocity_imu(2),1.0);
-    Eigen::Vector4d accV4(linear_acceleration_cam(0), linear_acceleration_cam(1), linear_acceleration_cam(2),1.0);
-    
-    Eigen::Vector4d angTV4 = T_imu_to_cam * angV4;
-    Eigen::Vector4d accTV4 = T_imu_to_cam * accV4;
-
-    angular_velocity_cam = Eigen::Vector3d(angTV4(0), angTV4(1), angTV4(2));
-    linear_acceleration_cam = Eigen::Vector3d(accTV4(0), accTV4(1), accTV4(2));
-}
-
-Eigen::Vector3d transformAngularVelocity(const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam) {
-    return R_imu_to_cam * imu_angular_velocity;
-}
-
-Eigen::Vector3d transformLinearAcceleration(const Eigen::Vector3d& imu_linear_acceleration, const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam, const Eigen::Vector3d& t_imu_to_cam) 
-{
-    Eigen::Vector3d omega = imu_angular_velocity;
-    Eigen::Vector3d acc_adjusted = imu_linear_acceleration;
-    Eigen::Vector3d centripetal = -omega.cross(omega.cross(t_imu_to_cam));
-    acc_adjusted += centripetal;
-    return R_imu_to_cam * acc_adjusted;
-}
-
 int main(int argc, char **argv)
 {
     if ( argc < 2 )
     {
-        std::cerr << "No config file given.. Usage : ./VIOSlam config_file_name (e.g. ./VIOSlam config.yaml)" << std::endl;
+        std::cerr << "No config file given.. Usage : ./VIOSlam config_file_name (e.g. ./VIOSlamMono config.yaml)" << std::endl;
 
         return -1;
     }
     std::string file = argv[1];
-    auto confFile = std::make_shared<TII::ConfigFile>(file.c_str());
-    auto slamSystem = std::make_shared<TII::VSlamSystem>(confFile,TII::VSlamSystem::SlamMode::MONOCULAR);
+    auto confFile = std::make_shared<GTSAM_VIOSLAM::ConfigFile>(file.c_str());
 
-    std::shared_ptr<TII::StereoCamera> StereoCam;
+    auto slamSystem = std::make_shared<GTSAM_VIOSLAM::VSlamSystem>(confFile,GTSAM_VIOSLAM::VSlamSystem::SlamMode::MONOCULAR);
+
+    std::shared_ptr<GTSAM_VIOSLAM::StereoCamera> StereoCam;
 
     slamSystem->GetStereoCamera(StereoCam);
-
-    // const size_t nFrames {StereoCam->numOfFrames};
 
     const std::string imagesPath = confFile->getValue<std::string>("imagesPath");
 
@@ -191,13 +138,13 @@ int main(int argc, char **argv)
     const double IMUAccelNoiseDensity = confFile->getValue<double>("IMU","accelerometer_noise_density");
     const double IMUAccelRandomWalk = confFile->getValue<double>("IMU","accelerometer_random_walk");
 
-    StereoCam->mCameraLeft->mIMUData = std::make_shared<TII::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
+    StereoCam->mCameraLeft->mIMUData = std::make_shared<GTSAM_VIOSLAM::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
 
-    TII::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
+    GTSAM_VIOSLAM::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
 
     bool IMUDataValid = getAllIMUData(allIMUData.mAngleVelocity, allIMUData.mAcceleration, allIMUData.mTimestamps, IMUDataPath + "data.csv");
 
-    const std::string ImageFileNamePath = confFile->getValue<std::string>("ImageFileNamePath");
+    const std::string ImageFileNamePath = imagesPath + "cam0/";
     std::vector<std::string> ImageFileNamesVec;
     std::vector<double> imageTimestamps;
 
@@ -219,7 +166,7 @@ int main(int argc, char **argv)
     // Eigen::Matrix4d tBodyToImuInv = tBodyToImu.inverse();
 
     // Get all the IMU Data between each new frame for pre Integration
-    auto IMUDataPerFrame = std::vector<TII::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
+    auto IMUDataPerFrame = std::vector<GTSAM_VIOSLAM::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
     if (IMUDataValid && imageTimestampsValid)
     {
         const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};
@@ -322,9 +269,6 @@ int main(int argc, char **argv)
     }
     std::cout << "System Shutdown!" << std::endl;
     slamSystem->ExitSystem();
-    std::cout << "Saving Trajectory.." << std::endl;
-    slamSystem->SaveTrajectoryAndPosition("single_cam_im_tra.txt", "single_cam_im_pos.txt");
-    std::cout << "Trajectory Saved!" << std::endl;
     exit(SIGINT);
 
 

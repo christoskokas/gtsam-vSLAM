@@ -17,7 +17,7 @@
 #include <gtsam/inference/Symbol.h>
 
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 FeatureTracker::FeatureTracker(std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, std::shared_ptr<Map> _map) : zedPtr(_zedPtr), feLeft(_feLeft), feRight(_feRight), map(_map), fm(zedPtr, _feLeft, _feRight, zedPtr->mHeight), fx(_zedPtr->mCameraLeft->fx), fy(_zedPtr->mCameraLeft->fy), cx(_zedPtr->mCameraLeft->cx), cy(_zedPtr->mCameraLeft->cy), activeMapPoints(_map->activeMapPoints), allFrames(_map->allFramesPoses), currentIMUData(nullptr)
@@ -53,7 +53,7 @@ void FeatureTracker::assignKeysToGrids(TrackedKeys& keysLeft, std::vector<cv::Ke
     }
 }
 
-void FeatureTracker::extractORBStereoMatchR(cv::Mat& leftIm, cv::Mat& rightIm, TrackedKeys& keysLeft)
+void FeatureTracker::extractORBAndStereoMatch(cv::Mat& leftIm, cv::Mat& rightIm, TrackedKeys& keysLeft)
 {
     std::thread extractLeft(&FeatureExtractor::extractKeysNew, feLeft, std::ref(leftIm), std::ref(keysLeft.keyPoints), std::ref(keysLeft.Desc));
     std::thread extractRight(&FeatureExtractor::extractKeysNew, feRight, std::ref(rightIm), std::ref(keysLeft.rightKeyPoints),std::ref(keysLeft.rightDesc));
@@ -69,7 +69,7 @@ void FeatureTracker::extractORBStereoMatchR(cv::Mat& leftIm, cv::Mat& rightIm, T
 
 }
 
-void FeatureTracker::initializeMapR(TrackedKeys& keysLeft)
+void FeatureTracker::initializeMap(TrackedKeys& keysLeft)
 {
     KeyFrame* kF = new KeyFrame(zedPtr->mCameraPose.pose, lIm.im, lIm.rIm,map->kIdx, curFrame);
     kF->scaleFactor = feLeft->scalePyramid;
@@ -190,8 +190,6 @@ bool FeatureTracker::check2dError(Eigen::Vector4d& p4d, const cv::Point2f& obs, 
 
 std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &activeMapPoints, TrackedKeys &keysLeft, std::vector<std::pair<int, int>> &matchesIdxs, Eigen::Matrix4d &estimPose, std::vector<bool> &MPsOutliers, const bool first)
 {
-    // const Eigen::Matrix4d estimPoseRInv = zedPtr->extrinsics.inverse();
-
     const size_t prevS { activeMapPoints.size() };
     const Eigen::Matrix3d& K_eigen = zedPtr->mCameraLeft->intrinsics;
 
@@ -219,12 +217,27 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
         gtsam::Point3(zedPtr->extrinsics.block<3, 1>(0, 3))
     );
 
-    initialEstimate.insert(gtsam::Symbol('x', 0), startPose);
-    graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', 0), startPose));
+    if (!currentIMUData)
+    {
+        gtsam::Pose3 predPose(
+            gtsam::Rot3(estimPoseInv.block<3, 3>(0, 0)),
+            gtsam::Point3(estimPoseInv.block<3, 1>(0, 3))
+        );
+
+        initialEstimate.insert(gtsam::Symbol('x', 1), predPose);
+    }
+    else
+    {
+        initialEstimate.insert(gtsam::Symbol('x', 0), startPose);
+        graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', 0), startPose));
+    }
+
+
 
     gtsam::SharedNoiseModel noiseModel = nullptr;
 
     // Loop through matched points and add projection factors
+    // Motion Only BA : Optimize only the camera Pose and Velocity, not the 3D Points
     for (size_t i{0}; i < matchesIdxs.size(); i++) 
     {
         if (MPsOutliers[i]) 
@@ -251,10 +264,9 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
             double sigma = 1.0 / feLeft->InvSigmaFactor[octL];
             noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
 
-            // Check if the keypoint is "close," meaning it's 3D
+            // Check if the keypoint is close, (close enough that it can be considered stereo)
             if (keysLeft.close[nIdx]) 
             {
-                // Construct the stereo measurement if `keysLeft.close[nIdx]` is true
                 Eigen::Vector2d obsR(keysLeft.rightKeyPoints[keyPos.second].pt.x, keysLeft.rightKeyPoints[keyPos.second].pt.y);
                 gtsam::StereoPoint2 stereoObs(obs.x(), obsR.x(), obs.y());
 
@@ -277,6 +289,8 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
             // Add landmark initial estimate and any prior constraints
             initialEstimate.insert(gtsam::Symbol('l', i), gtsamPoint);
+
+            // keep 3D point Frozen, only optimize Camera Pose
             graph.add(gtsam::NonlinearEquality<gtsam::Point3>(gtsam::Symbol('l', i), gtsamPoint));
             
         }
@@ -288,7 +302,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
             Eigen::Vector2d obsR(keysLeft.rightKeyPoints[rIdx].pt.x, keysLeft.rightKeyPoints[rIdx].pt.y);
             gtsam::Point2 observationR(obsR);
 
-            // Adding projection factor for the right image (stereo)
+            // Adding projection factor for the right keypoint
             const int octR = keysLeft.rightKeyPoints[rIdx].octave;
             double sigma = 1.0/feLeft->InvSigmaFactor[octR];
             noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
@@ -297,7 +311,7 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
             graph.add(factorR);
 
-            // Optionally, add initial estimate if not already inserted
+            // Add initial estimate if not already inserted
             if (!initialEstimate.exists(gtsam::Symbol('l', i))) 
             {
                 initialEstimate.insert(gtsam::Symbol('l', i), gtsamPoint);
@@ -309,98 +323,93 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
     }
 
     // IMU Preintegration 
-
-    const double gyroNoiseDensity = currentIMUData->mGyroNoiseDensity;
-    double gyroRandomWalk = currentIMUData->mGyroRandomWalk;
-    double accelNoiseDensity = currentIMUData->mAccelNoiseDensity;
-    double accelRandomWalk = currentIMUData->mAccelRandomWalk;
-    
-    // Initialize IMU preintegration parameters
-    // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
-    // auto preintegrationParams = gtsam::PreintegrationCombinedParams::MakeSharedU(9.81);
-
-    const Eigen::Vector3d gravity = zedPtr->mCameraLeft->mIMUGravity;
-
-    auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(gravity.data())));
-    // auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(0, -9.81, 0)));
-    
-    preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
-    preintegrationParams->accelerometerCovariance = gtsam::Matrix33::Identity() * pow(accelNoiseDensity, 2);
-    preintegrationParams->biasOmegaCovariance = gtsam::Matrix33::Identity() * pow(gyroRandomWalk, 2);
-    preintegrationParams->biasAccCovariance = gtsam::Matrix33::Identity() * pow(accelRandomWalk, 2);
-
-    preintegrationParams->integrationCovariance = gtsam::I_3x3 * 1e-5;
-    
-    // preintegrationParams->biasAccOmegaInt = gtsam::Matrix::Identity(6,6)*1e-5;
-
-    const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam;
-    gtsam::Pose3 TBodyToCamGtsam(
-        gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
-        gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
-    );
-
-    preintegrationParams->body_P_sensor = TBodyToCamGtsam;
-
-    // gtsam::imuBias::ConstantBias initialBias; 
-
-    gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
-
-    const size_t IMUDataSize{currentIMUData->mTimestamps.size()};
-    double dt {1.0/currentIMUData->mHz};
-    for (size_t i = 0; i < IMUDataSize; ++i)
+    if (currentIMUData)
     {
-        const auto& acceleration = currentIMUData->mAcceleration[i];
-        const auto& angleVelocity = currentIMUData->mAngleVelocity[i];
-        gtsam::Vector3 accel(acceleration[0], acceleration[1], acceleration[2]);
-        gtsam::Vector3 angleVel(angleVelocity[0], angleVelocity[1], angleVelocity[2]);
 
-        if ((i+1) < IMUDataSize)
+        const double gyroNoiseDensity = currentIMUData->mGyroNoiseDensity;
+        double gyroRandomWalk = currentIMUData->mGyroRandomWalk;
+        double accelNoiseDensity = currentIMUData->mAccelNoiseDensity;
+        double accelRandomWalk = currentIMUData->mAccelRandomWalk;
+        
+        // Set the gravity Vector of the IMU to the first IMU measurement
+        const Eigen::Vector3d gravity = zedPtr->mCameraLeft->mIMUGravity;
+
+        auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(gravity.data())));
+        // auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(0, -9.81, 0)));
+        
+        // IMU Noise
+        preintegrationParams->gyroscopeCovariance = gtsam::Matrix33::Identity() * pow(gyroNoiseDensity, 2);
+        preintegrationParams->accelerometerCovariance = gtsam::Matrix33::Identity() * pow(accelNoiseDensity, 2);
+        preintegrationParams->biasOmegaCovariance = gtsam::Matrix33::Identity() * pow(gyroRandomWalk, 2);
+        preintegrationParams->biasAccCovariance = gtsam::Matrix33::Identity() * pow(accelRandomWalk, 2);
+
+        preintegrationParams->integrationCovariance = gtsam::I_3x3 * 1e-5;
+        
+        // preintegrationParams->biasAccOmegaInt = gtsam::Matrix::Identity(6,6)*1e-5;
+
+        // Get Extrinsics between IMU and Camera Pose
+        const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam;
+        gtsam::Pose3 TBodyToCamGtsam(
+            gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
+            gtsam::Point3(TBodyToCam.block<3, 1>(0, 3))
+        );
+
+        preintegrationParams->body_P_sensor = TBodyToCamGtsam;
+
+        gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
+
+        const size_t IMUDataSize{currentIMUData->mTimestamps.size()};
+        double dt {1.0/currentIMUData->mHz};
+        for (size_t i = 0; i < IMUDataSize; ++i)
         {
-            const auto& timestamp0 = currentIMUData->mTimestamps[i];
-            const auto& timestamp1 = currentIMUData->mTimestamps[i+1];
-            dt = (timestamp1 - timestamp0) / 1e9;
+            const auto& acceleration = currentIMUData->mAcceleration[i];
+            const auto& angleVelocity = currentIMUData->mAngleVelocity[i];
+            gtsam::Vector3 accel(acceleration[0], acceleration[1], acceleration[2]);
+            gtsam::Vector3 angleVel(angleVelocity[0], angleVelocity[1], angleVelocity[2]);
+
+            if ((i+1) < IMUDataSize)
+            {
+                const auto& timestamp0 = currentIMUData->mTimestamps[i];
+                const auto& timestamp1 = currentIMUData->mTimestamps[i+1];
+                dt = (timestamp1 - timestamp0) / 1e9;
+            }
+
+            preintegratedImu.integrateMeasurement(accel, angleVel, dt);
         }
-        // std::cout << "dt : " << dt << std::endl;
 
-        // Integrate the IMU measurements
-        preintegratedImu.integrateMeasurement(accel, angleVel, dt);
+        // Add velocity and bias and freeze them
+        gtsam::Vector3 priorVel(zedPtr->mCameraLeft->mVelocity.data());
+        initialEstimate.insert(gtsam::Symbol('v', 0), priorVel);
+        graph.add(gtsam::NonlinearEquality<gtsam::Vector3>(gtsam::Symbol('v', 0), priorVel));
+        initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
+        graph.add(gtsam::NonlinearEquality<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', 0), initialBias));
+
+        // Predict next Pose using IMU Measurements
+        gtsam::NavState prev_state(startPose, priorVel);
+        gtsam::NavState prop_state = prev_state;
+        gtsam::imuBias::ConstantBias prev_bias = initialBias;
+        prop_state = preintegratedImu.predict(prev_state, prev_bias);
+
+        // Add the IMU Preintegration
+        graph.add(gtsam::CombinedImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
+                                gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
+                                gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), preintegratedImu));
+
+
+        initialEstimate.insert(gtsam::Symbol('x',1), prop_state.pose());
+        initialEstimate.insert(gtsam::Symbol('v',1), prop_state.v());
+        initialEstimate.insert(gtsam::Symbol('b',1), prev_bias);
+
+        // Add bias factor to the graph
+        auto biasNoise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3); // Small noise model for bias
+        graph.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(
+            gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
+
+        graph.add(gtsam::PriorFactor<gtsam::Pose3>(gtsam::Symbol('x', 1),prop_state.pose()));
+
+        graph.add(gtsam::PriorFactor<gtsam::Vector3>(gtsam::Symbol('v', 1),prop_state.v()));
+
     }
-
-    gtsam::Vector3 priorVel(zedPtr->mCameraLeft->mVelocity.data());
-    initialEstimate.insert(gtsam::Symbol('v', 0), priorVel);
-    graph.add(gtsam::NonlinearEquality<gtsam::Vector3>(gtsam::Symbol('v', 0), priorVel));
-    initialEstimate.insert(gtsam::Symbol('b', 0), initialBias);
-    graph.add(gtsam::NonlinearEquality<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', 0), initialBias));
-
-
-    gtsam::NavState prev_state(startPose, priorVel);
-    gtsam::NavState prop_state = prev_state;
-    gtsam::imuBias::ConstantBias prev_bias = initialBias;
-    prop_state = preintegratedImu.predict(prev_state, prev_bias);
-
-    graph.add(gtsam::CombinedImuFactor(gtsam::Symbol('x', 0), gtsam::Symbol('v', 0), 
-                               gtsam::Symbol('x', 1), gtsam::Symbol('v', 1), 
-                               gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), preintegratedImu));
-
-    // gtsam::noiseModel::Diagonal::shared_ptr bias_noise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3);
-
-    initialEstimate.insert(gtsam::Symbol('x',1), prop_state.pose());
-    initialEstimate.insert(gtsam::Symbol('v',1), prop_state.v());
-    initialEstimate.insert(gtsam::Symbol('b',1), prev_bias);
-
-    // Add bias factor to the graph
-    auto biasNoise = gtsam::noiseModel::Isotropic::Sigma(6, 1e-3); // Small noise model for bias
-    graph.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(
-        gtsam::Symbol('b', 0), gtsam::Symbol('b', 1), gtsam::imuBias::ConstantBias(), biasNoise));
-
-    // graph.add(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::Symbol('x', 0), gtsam::Symbol('x', 1),prop_state.pose()));
-    graph.add(gtsam::PriorFactor<gtsam::Pose3>(gtsam::Symbol('x', 1),prop_state.pose()));
-
-    // graph.add(gtsam::BetweenFactor<gtsam::Vector3>(gtsam::Symbol('v', 0), gtsam::Symbol('v', 1),prop_state.v()));
-    graph.add(gtsam::PriorFactor<gtsam::Vector3>(gtsam::Symbol('v', 1),prop_state.v()));
-    // Insert pose and velocity estimates at step_1 (initial guess)
-    // initialEstimate.insert(gtsam::Symbol('v', 1), gtsam::Vector3(0, 0, 0));
-    // initialEstimate.insert(gtsam::Symbol('b', 1), initialBias);
 
     gtsam::LevenbergMarquardtParams params;
     params.maxIterations = 100;
@@ -409,11 +418,13 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAM(std::vector<MapPoint *> &a
 
     // Extract optimized pose
     gtsam::Pose3 optimizedPose = result.at<gtsam::Pose3>(gtsam::Symbol('x', 1));
+    if (currentIMUData)
+    {
+        gtsam::Vector3 camVelocity = result.at<gtsam::Vector3>(gtsam::Symbol('v', 1));
+        zedPtr->mCameraLeft->mNewVelocity = Eigen::Vector3d(camVelocity.data());
 
-    gtsam::Vector3 camVelocity = result.at<gtsam::Vector3>(gtsam::Symbol('v', 1));
-    zedPtr->mCameraLeft->mNewVelocity = Eigen::Vector3d(camVelocity.data());
-
-    initialBias = result.at<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', 1));
+        initialBias = result.at<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', 1));
+    }
 
     estimPoseInv.block<3, 3>(0, 0) = optimizedPose.rotation().matrix();
     estimPoseInv.block<3, 1>(0, 3) = optimizedPose.translation();
@@ -479,7 +490,6 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAMMono(std::vector<MapPoint *
             double sigma = 1.0 / feLeft->InvSigmaFactor[octL];
             noiseModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(sigma, sigma));
 
-            // Use a regular projection factor for non-close keypoints
             auto factor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>(
                 observation, noiseModel, gtsam::Symbol('x', 1), gtsam::Symbol('l', i), K);
 
@@ -512,8 +522,6 @@ std::pair<int, int> FeatureTracker::estimatePoseGTSAMMono(std::vector<MapPoint *
 
     preintegrationParams->integrationCovariance = gtsam::I_3x3 * 1e-5;
     
-    // preintegrationParams->biasAccOmegaInt = gtsam::Matrix::Identity(6,6)*1e-5;
-
     const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam;
     gtsam::Pose3 TBodyToCamGtsam(
         gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
@@ -665,7 +673,6 @@ int FeatureTracker::findOutliersR(const Eigen::Matrix4d &estimPose, std::vector<
 
 int FeatureTracker::findOutliersMono(const Eigen::Matrix4d &estimPose, std::vector<MapPoint *> &activeMapPoints, TrackedKeys &keysLeft, std::vector<std::pair<int, int>> &matchesIdxs, const double thres, std::vector<bool> &MPsOutliers, const std::vector<float> &weights, int &nInliers)
 {
-    const Eigen::Matrix4d estimPoseInv = estimPose.inverse();
     for (size_t i {0}, end{matchesIdxs.size()}; i < end; i++)
     {
         std::pair<int,int>& keyPos = matchesIdxs[i];
@@ -675,7 +682,6 @@ int FeatureTracker::findOutliersMono(const Eigen::Matrix4d &estimPose, std::vect
         Eigen::Vector4d p4d = mp->getWordPose4d();
         int nIdx;
         cv::Point2f obs;
-        bool right {false};
         if ( keyPos.first >= 0 )
         {
             if  ( !mp->inFrame )
@@ -699,7 +705,7 @@ int FeatureTracker::findOutliersMono(const Eigen::Matrix4d &estimPose, std::vect
     return nInliers;
 }
 
-bool FeatureTracker::worldToFrameRTrack(MapPoint* mp, const bool right, const Eigen::Matrix4d& predPoseInv, const Eigen::Matrix4d& tempPose)
+bool FeatureTracker::worldToFrame(MapPoint* mp, const bool right, const Eigen::Matrix4d& predPoseInv, const Eigen::Matrix4d& tempPose)
 {
     Eigen::Vector4d wPos = mp->getWordPose4d();
     Eigen::Vector4d point = predPoseInv * wPos;
@@ -757,12 +763,10 @@ bool FeatureTracker::worldToFrameRTrack(MapPoint* mp, const bool right, const Ei
     return true;
 }
 
-void FeatureTracker::insertKeyFrameR(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const int nStereo, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm)
+void FeatureTracker::insertKeyFrame(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const int nStereo, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm)
 {
     Eigen::Matrix4d referencePose = latestKF->pose.getInvPose() * estimPose;
     KeyFrame* kF = new KeyFrame(zedPtr, referencePose, estimPose, leftIm, rleftIm,map->kIdx, curFrame);
-    if ( map->aprilTagDetected && !map->LCStart )
-        kF->LCCand = true;
     kF->scaleFactor = feLeft->scalePyramid;
     kF->sigmaFactor = feLeft->sigmaFactor;
     kF->InvSigmaFactor = feLeft->InvSigmaFactor;
@@ -855,11 +859,6 @@ void FeatureTracker::insertKeyFrameR(TrackedKeys& keysLeft, std::vector<int>& ma
     Eigen::Matrix4d lastKFPose = estimPose;
     lastKFPoseInv = lastKFPose.inverse();
     allFrames.emplace_back(kF);
-    if ( map->aprilTagDetected && !map->LCStart )
-    {
-        map->LCStart = true;
-        map->LCCandIdx = kF->numb;
-    }
     if ( map->keyFrames.size() > 3 && !map->LCStart )
         map->keyFrameAdded = true;
 
@@ -869,8 +868,6 @@ void FeatureTracker::insertKeyFrameMono(TrackedKeys& keysLeft, std::vector<int>&
 {
     Eigen::Matrix4d referencePose = latestKF->pose.getInvPose() * estimPose;
     KeyFrame* kF = new KeyFrame(zedPtr, referencePose, estimPose, leftIm, rleftIm,map->kIdx, curFrame);
-    if ( map->aprilTagDetected && !map->LCStart )
-        kF->LCCand = true;
     kF->scaleFactor = feLeft->scalePyramid;
     kF->sigmaFactor = feLeft->sigmaFactor;
     kF->InvSigmaFactor = feLeft->InvSigmaFactor;
@@ -923,14 +920,12 @@ void FeatureTracker::insertKeyFrameMono(TrackedKeys& keysLeft, std::vector<int>&
 
 double FeatureTracker::calculateParallaxAngle(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2) 
 {
-    // Extract rotation matrices from the poses
     Eigen::Matrix3d rotation1 = pose1.block<3,3>(0,0);
     Eigen::Matrix3d rotation2 = pose2.block<3,3>(0,0);
     
-    // Calculate relative rotation matrix
     Eigen::Matrix3d relativeRotation = rotation1.transpose() * rotation2;
     
-    // Compute the angle of rotation using the trace of the relative rotation matrix
+    // Compute the angle of rotation 
     double trace = relativeRotation.trace();
     double angle = std::acos(std::clamp((trace - 1.0) / 2.0, -1.0, 1.0));
     
@@ -940,7 +935,6 @@ double FeatureTracker::calculateParallaxAngle(const Eigen::Matrix4d& pose1, cons
 bool FeatureTracker::isParallaxSufficient(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2, double threshold) 
 {
     double parallaxAngle = calculateParallaxAngle(pose1, pose2);
-    std::cout << "parallax Angle : " << parallaxAngle << std::endl;
     return parallaxAngle > threshold;
 }
 
@@ -983,7 +977,7 @@ void FeatureTracker::changePosesLCA(const int endIdx)
 
 }
 
-void FeatureTracker::removeOutOfFrameMPsR(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints)
+void FeatureTracker::removeOutOfFrameMPs(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints)
 {
     const size_t end{activeMapPoints.size()};
     Eigen::Matrix4d toRCamera = (predNPose * zedPtr->extrinsics).inverse();
@@ -998,8 +992,8 @@ void FeatureTracker::removeOutOfFrameMPsR(const Eigen::Matrix4d& currCamPose, co
             continue;
         if ( mp->GetIsOutlier() )
             continue;
-        bool c1 = worldToFrameRTrack(mp, false, toCamera, temp);
-        bool c2 = worldToFrameRTrack(mp, true, toRCamera, tempR);
+        bool c1 = worldToFrame(mp, false, toCamera, temp);
+        bool c2 = worldToFrame(mp, true, toRCamera, tempR);
         if (c1 && c2 )
         {
             mp->setActive(true);
@@ -1027,7 +1021,7 @@ void FeatureTracker::removeOutOfFrameMPsMono(const Eigen::Matrix4d& currCamPose,
             continue;
         if ( mp->GetIsOutlier() )
             continue;
-        bool c1 = worldToFrameRTrack(mp, false, toCamera, temp);
+        bool c1 = worldToFrame(mp, false, toCamera, temp);
         if (c1)
         {
             mp->setActive(true);
@@ -1042,7 +1036,7 @@ void FeatureTracker::removeOutOfFrameMPsMono(const Eigen::Matrix4d& currCamPose,
     activeMapPoints.resize(j);
 }
 
-void FeatureTracker::newPredictMPs(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers)
+void FeatureTracker::PredictMPsPosition(const Eigen::Matrix4d& currCamPose, const Eigen::Matrix4d& predNPose, std::vector<MapPoint*>& activeMapPoints, std::vector<int>& matchedIdxsL, std::vector<int>& matchedIdxsR, std::vector<std::pair<int,int>>& matchesIdxs, std::vector<bool> &MPsOutliers)
 {
     const size_t end{activeMapPoints.size()};
     Eigen::Matrix4d toRCamera = (predNPose * zedPtr->extrinsics).inverse();
@@ -1056,7 +1050,7 @@ void FeatureTracker::newPredictMPs(const Eigen::Matrix4d& currCamPose, const Eig
         if ( !mp )
             continue;
         std::pair<int,int>& keyPos = matchesIdxs[i];
-        if (!worldToFrameRTrack(mp, false, toCamera, temp))
+        if (!worldToFrame(mp, false, toCamera, temp))
         {
             if ( keyPos.first >=0 )
             {
@@ -1064,7 +1058,7 @@ void FeatureTracker::newPredictMPs(const Eigen::Matrix4d& currCamPose, const Eig
                 keyPos.first = -1;
             }
         }
-        if (!worldToFrameRTrack(mp, true, toRCamera, tempR))
+        if (!worldToFrame(mp, true, toRCamera, tempR))
         {
             if ( keyPos.second >= 0 )
             {
@@ -1116,10 +1110,6 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
     double accelNoiseDensity = currentIMUData->mAccelNoiseDensity;
     double accelRandomWalk = currentIMUData->mAccelRandomWalk;
     
-    // Initialize IMU preintegration parameters
-    // auto preintegrationParams = gtsam::PreintegrationParams::MakeSharedU(9.81); 
-    // auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(0, 9.81, 0)));
-    
     const Eigen::Vector3d gravity = zedPtr->mCameraLeft->mIMUGravity;
 
     auto preintegrationParams = boost::shared_ptr<gtsam::PreintegrationCombinedParams>(new gtsam::PreintegrationCombinedParams(gtsam::Vector3(gravity.data())));
@@ -1133,8 +1123,6 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
 
     // preintegrationParams->biasAccOmegaInt = gtsam::Matrix::Identity(6,6)*1e-5;
 
-    // preintegrationParams->integrationCovariance = gtsam::Matrix33::Identity(3,3)*1e-8;
-
     const Eigen::Matrix4d& TBodyToCam = zedPtr->mCameraLeft->TBodyToCam;
     gtsam::Pose3 TBodyToCamGtsam(
         gtsam::Rot3(TBodyToCam.block<3, 3>(0, 0)),
@@ -1142,8 +1130,6 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
     );
 
     preintegrationParams->body_P_sensor = TBodyToCamGtsam;
-
-    // gtsam::imuBias::ConstantBias initialBias; 
 
     gtsam::PreintegratedCombinedMeasurements preintegratedImu(preintegrationParams, initialBias);
 
@@ -1163,12 +1149,10 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
             dt = (timestamp1 - timestamp0) / 1e9;
         }
 
-        // Integrate the IMU measurements
         preintegratedImu.integrateMeasurement(accel, angleVel, dt);
     }
 
-    // Insert initial velocity and bias (assumed zero for now)
-    gtsam::Vector3 priorVel(zedPtr->mCameraLeft->mVelocity.data());
+    gtsam::Vector3 priorVel(predVelocity);
 
     const Eigen::Matrix4d& currentCamPose = zedPtr->mCameraPose.getPose();
 
@@ -1183,6 +1167,7 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
     prop_state = preintegratedImu.predict(prev_state, prev_bias);
 
     gtsam::Pose3 predPose = prop_state.pose();
+    predVelocity = prop_state.v();
     Eigen::Matrix4d predPoseEigen = Eigen::Matrix4d::Identity();
     predPoseEigen.block<3, 3>(0, 0) = predPose.rotation().matrix();
     predPoseEigen.block<3, 1>(0, 3) = predPose.translation();
@@ -1190,20 +1175,18 @@ Eigen::Matrix4d FeatureTracker::PredictNextPoseIMU()
 
 }
 
-void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr /* = nullptr*/)
+void FeatureTracker::TrackImage(const cv::Mat& leftRect, const cv::Mat& rightRect, const int frameNumb, std::shared_ptr<IMUData> IMUDataptr /* = nullptr*/)
 {
     if (IMUDataptr)
         currentIMUData = IMUDataptr;
     curFrame = frameNumb;
-    curFrameNumb++;
     
-    if ( map->LBADone || map->LCDone )
+    // Change Poses created after Bundle Adjustment if BA has finished
+    if ( map->LBADone )
     {
         std::lock_guard<std::mutex> lock(map->mapMutex);
-        const int endIdx = (map->LCDone) ? map->endLCIdx : map->endLBAIdx;
+        const int endIdx = map->endLBAIdx;
         changePosesLCA(endIdx);
-        if ( map->LCDone )
-            map->LCDone = false;
         if ( map->LBADone )
             map->LBADone = false;
     }
@@ -1233,12 +1216,12 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
     
     TrackedKeys keysLeft;
 
-
-    if ( curFrameNumb == 0 )
+    // first frame initialize map with stereo matches
+    if ( curFrame == 0 )
     {
-        extractORBStereoMatchR(leftIm, rightIm, keysLeft);
+        extractORBAndStereoMatch(leftIm, rightIm, keysLeft);
 
-        initializeMapR(keysLeft);
+        initializeMap(keysLeft);
 
         return;
     }
@@ -1248,17 +1231,17 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
 
     Eigen::Matrix4d estimPose = predNPoseInv;
 
-
+    // remove out of frame MPs according to prediction
     std::vector<MapPoint *> activeMpsTemp;
     {
     std::lock_guard<std::mutex> lock(map->mapMutex);
-    removeOutOfFrameMPsR(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);
+    removeOutOfFrameMPs(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);
     activeMpsTemp = activeMapPoints;
     }
 
     
 
-    extractORBStereoMatchR(leftIm, rightIm, keysLeft);
+    extractORBAndStereoMatch(leftIm, rightIm, keysLeft);
 
     std::vector<int> matchedIdxsL(keysLeft.keyPoints.size(), -1);
     std::vector<int> matchedIdxsR(keysLeft.rightKeyPoints.size(), -1);
@@ -1270,7 +1253,12 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
 
     float rad {10.0};
 
-    if ( curFrameNumb == 1 )
+
+    // Match by projection and radius
+    // the feature is assigned a key according its position in the frame
+    // the 3D point is projected to the frame (using its predicted next pose)
+    // then for each feature search around a radius for potential matches and select the best one
+    if ( curFrame == 1 )
         rad = 120;
     else
         rad = 10;
@@ -1280,6 +1268,7 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
     float prevrad = rad;
     bool toBreak {false};
     int countIte {0};
+    // repeat until we have a lot of inliers (until 3 times)
     while ( nIn.first < minInliers )
     {
         countIte++;
@@ -1313,13 +1302,16 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
 
     }
 
-    newPredictMPs(zedPtr->mCameraPose.pose, estimPose.inverse(), activeMpsTemp, matchedIdxsL, matchedIdxsR, matchesIdxs, MPsOutliers);
+    // repeat with the estimated pose
+    PredictMPsPosition(zedPtr->mCameraPose.pose, estimPose.inverse(), activeMpsTemp, matchedIdxsL, matchedIdxsR, matchesIdxs, MPsOutliers);
 
     rad = 4;
     fm.matchByProjectionRPred(activeMpsTemp, keysLeft, matchedIdxsL, matchedIdxsR, matchesIdxs, rad);
 
     std::pair<int,int> nStIn = estimatePoseGTSAM(activeMpsTemp, keysLeft, matchesIdxs, estimPose, MPsOutliers, false);
 
+
+    // draw the tracked Keypoints
     std::vector<cv::KeyPoint> lp;
     lp.reserve(matchesIdxs.size());
     for ( size_t i{0}; i < matchesIdxs.size(); i++)
@@ -1334,17 +1326,20 @@ void FeatureTracker::TrackImageT(const cv::Mat& leftRect, const cv::Mat& rightRe
 
     poseEst = estimPose.inverse();
 
+    // insert Keyframe if needed
+    // adding new 3d points
     insertKeyFrameCount ++;
-    if ( ((nStIn.second < minNStereo || insertKeyFrameCount >= keyFrameCountEnd) && nStIn.first < precCheckMatches * lastKFTrackedNumb) || (map->aprilTagDetected && !map->LCStart) )
+    if ( ((nStIn.second < minNStereo || insertKeyFrameCount >= keyFrameCountEnd) && nStIn.first < precCheckMatches * lastKFTrackedNumb))
     {
         insertKeyFrameCount = 0;
-        insertKeyFrameR(keysLeft, matchedIdxsL,matchesIdxs, nStIn.second, poseEst, MPsOutliers, leftIm, realLeftIm);
+        insertKeyFrame(keysLeft, matchedIdxsL,matchesIdxs, nStIn.second, poseEst, MPsOutliers, leftIm, realLeftIm);
+        // if keyframe is added local BA begins
     }
     else
         addFrame(poseEst);
 
 
-    publishPoseNew();
+    updatePoses();
 
     setActiveOutliers(activeMpsTemp,MPsOutliers, matchesIdxs);
 
@@ -1357,18 +1352,6 @@ void FeatureTracker::TrackImageMonoIMU(const cv::Mat& leftRect, const int frameN
     if (IMUDataptr)
         currentIMUData = IMUDataptr;
     curFrame = frameNumb;
-    curFrameNumb++;
-    
-    if ( map->LBADone || map->LCDone )
-    {
-        std::lock_guard<std::mutex> lock(map->mapMutex);
-        const int endIdx = (map->LCDone) ? map->endLCIdx : map->endLBAIdx;
-        changePosesLCA(endIdx);
-        if ( map->LCDone )
-            map->LCDone = false;
-        if ( map->LBADone )
-            map->LBADone = false;
-    }
 
     cv::Mat realLeftIm;
     cv::Mat leftIm;
@@ -1392,7 +1375,7 @@ void FeatureTracker::TrackImageMonoIMU(const cv::Mat& leftRect, const int frameN
     TrackedKeys keysLeft;
 
 
-    if ( curFrameNumb == 0 )
+    if ( curFrame == 0 )
     {
         feLeft->extractKeysNew(leftIm, keysLeft.keyPoints, keysLeft.Desc);
 
@@ -1409,11 +1392,23 @@ void FeatureTracker::TrackImageMonoIMU(const cv::Mat& leftRect, const int frameN
 
     Eigen::Matrix4d estimPose = predNPoseInv;
 
-    // cv::imshow("image", realLeftIm);
-    // cv::waitKey(1);
-
-    if(!isParallaxSufficient(zedPtr->mCameraPose.pose, predNPose, parallaxThreshold))
+    if(!isParallaxSufficient(zedPtr->mCameraPose.pose, predNPose, parallaxThreshold) && !monoInitialized)
         return;
+    else if (!secondKF)
+    {
+        feLeft->extractKeysNew(leftIm, keysLeft.keyPoints, keysLeft.Desc);
+
+        assignKeysToGrids(keysLeft, keysLeft.keyPoints, keysLeft.lkeyGrid, zedPtr->mWidth, zedPtr->mHeight);
+
+        keysLeft.estimatedDepth.resize(keysLeft.keyPoints.size(), -1.0f);
+
+        initializeMono(keysLeft);
+
+        poseEst = predNPose;
+        updatePoses();
+        secondKF = true;
+        return;
+    }
 
     feLeft->extractKeysNew(leftIm, keysLeft.keyPoints, keysLeft.Desc);
 
@@ -1434,17 +1429,19 @@ void FeatureTracker::TrackImageMonoIMU(const cv::Mat& leftRect, const int frameN
         actKeyF.reserve(20);
         actKeyF.emplace_back(lastKF);
         actKeyF = map->allFramesPoses;
-        // lastKF->getConnectedKFs(actKeyF, actvKFMaxSize);
         std::vector<MapPoint*> pointsToAdd(lastKF->keys.keyPoints.size(), nullptr);
         addMappointsMono(pointsToAdd, actKeyF, matchedIdxsL, matchesIdxs);
         addNewMapPoints(pointsToAdd);
         monoInitialized = true;
+
+        poseEst = predNPose;
+        updatePoses();
         return;
     }
     else
     {
     std::lock_guard<std::mutex> lock(map->mapMutex);
-    removeOutOfFrameMPsMono(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);
+    // removeOutOfFrameMPsMono(zedPtr->mCameraPose.pose, predNPose, activeMapPoints);
     activeMpsTemp = activeMapPoints;
 
     matchesIdxs = std::vector<std::pair<int,int>>(activeMapPoints.size(), std::make_pair(-1,-1));
@@ -1550,7 +1547,7 @@ void FeatureTracker::TrackImageMonoIMU(const cv::Mat& leftRect, const int frameN
         addFrame(poseEst);
 
 
-    publishPoseNew();
+    updatePoses();
 
     setActiveOutliers(activeMpsTemp,MPsOutliers, matchesIdxs);
 
@@ -1628,14 +1625,13 @@ void FeatureTracker::addNewMapPoints(std::vector<MapPoint*>& pointsToAdd)
         std::unordered_map<KeyFrame *, std::pair<int, int>>::iterator it, endMp(newMp->kFMatches.end());
         for ( it = newMp->kFMatches.begin(); it != endMp; it++)
         {
-            // KeyFrame* kFCand = it->first;
-            // std::pair<int,int>& keyPos = it->second;
-            // newMp->addConnectionMono(kFCand, keyPos);
+            KeyFrame* kFCand = it->first;
+            std::pair<int,int>& keyPos = it->second;
+            newMp->addConnectionMono(kFCand, keyPos);
         }
         map->activeMapPoints.emplace_back(newMp);
         map->addMapPoint(newMp);
         newMapPointsCount ++;
-        // std::cout << "mp count : " << newMapPointsCount <<  " i : " << i << std::endl;
     }
 
 }
@@ -1655,7 +1651,7 @@ bool FeatureTracker::calculateMPFromMono(Eigen::Vector4d& p4d, std::vector<MapPo
 
         Point2 measured(key.pt.x, key.pt.y);
         observations.emplace_back(measured);
-        cameraPoses.emplace_back(KF->pose.pose);
+        cameraPoses.emplace_back(KF->pose.poseInverse);
     }
 
     std::optional<gtsam::Point3> resu;
@@ -1675,7 +1671,7 @@ bool FeatureTracker::calculateMPFromMono(Eigen::Vector4d& p4d, std::vector<MapPo
     if (resu.has_value())
     {
         gtsam::Point3 p3 = resu.value();
-        p4d = Eigen::Vector4d(p3(0), p3(1), p3(2), 1.0);
+        p4d = Eigen::Vector4d(p3.x(), p3.y(), p3.z(), 1.0);
         return true;
     }
     return false;
@@ -1695,7 +1691,7 @@ void FeatureTracker::drawKeys(const char* com, cv::Mat& im, std::vector<cv::KeyP
     cv::waitKey(1);
 }
 
-void FeatureTracker::publishPoseNew()
+void FeatureTracker::updatePoses()
 {
     Eigen::Matrix4d prevWPoseInv = zedPtr->mCameraPose.poseInverse;
     Eigen::Matrix4d referencePose = lastKFPoseInv * poseEst;
@@ -1706,4 +1702,4 @@ void FeatureTracker::publishPoseNew()
     predNPoseInv = predNPose.inverse();
 }
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

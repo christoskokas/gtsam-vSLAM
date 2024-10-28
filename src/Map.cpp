@@ -1,6 +1,6 @@
 #include "Map.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 MapPoint::MapPoint(const Eigen::Vector4d& p, const cv::Mat& _desc, const cv::KeyPoint& obsK, const unsigned long _kdx, const unsigned long _idx) : wp(p), kdx(_kdx), idx(_idx)
@@ -149,12 +149,11 @@ void MapPoint::calcDescriptor()
     std::vector<cv::Mat> vDescriptors;
 
     std::unordered_map<KeyFrame*,std::pair<int,int>> observations = kFMatches;
-    std::unordered_map<KeyFrame*,std::pair<int,int>> observationsB = kFMatchesB;
 
     if(observations.empty())
         return;
 
-    vDescriptors.reserve(observations.size() + observationsB.size());
+    vDescriptors.reserve(observations.size());
 
     for(std::unordered_map<KeyFrame*,std::pair<int,int>> ::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
     {
@@ -168,21 +167,6 @@ void MapPoint::calcDescriptor()
         }
         if(rightIndex != -1){
             vDescriptors.push_back(pKF->keys.rightDesc.row(rightIndex));
-        }
-    }
-
-    for(std::unordered_map<KeyFrame*,std::pair<int,int>> ::iterator mit=observationsB.begin(), mend=observationsB.end(); mit!=mend; mit++)
-    {
-        KeyFrame* pKF = mit->first;
-
-        std::pair<int,int> indexes = mit -> second;
-        int leftIndex = indexes.first, rightIndex = indexes.second;
-
-        if(leftIndex != -1){
-            vDescriptors.push_back(pKF->keysB.Desc.row(leftIndex));
-        }
-        if(rightIndex != -1){
-            vDescriptors.push_back(pKF->keysB.rightDesc.row(rightIndex));
         }
     }
 
@@ -253,11 +237,6 @@ void MapPoint::updatePos(const Eigen::Vector3d& newPos, const std::shared_ptr<St
 void MapPoint::eraseKFConnection(KeyFrame* kF)
 {
     kFMatches.erase(kF);
-}
-
-void MapPoint::eraseKFConnectionB(KeyFrame* kF)
-{
-    kFMatchesB.erase(kF);
 }
 
 bool MapPoint::GetInFrame() const
@@ -332,4 +311,4 @@ void Map::addKeyFrame(KeyFrame* kF)
     kIdx ++;
 }
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

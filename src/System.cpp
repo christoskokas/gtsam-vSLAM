@@ -1,6 +1,6 @@
 #include "System.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode mode /* = SlamMode::STEREO*/) : mConfigFile(configFile), mMode(mode)
@@ -31,7 +31,6 @@ void VSlamSystem::InitializeMonocular()
   mFeatureExtractorLeft = std::make_shared<FeatureExtractor>();
   mFeatureMatcher = std::make_shared<FeatureMatcher>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorLeft);
   mFeatureTracker = std::make_shared<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
-  std::cout << "Monocular Camera Initialized.." << std::endl;
 }
 
 void VSlamSystem::InitializeStereo()
@@ -58,21 +57,11 @@ void VSlamSystem::InitializeStereo()
   mFeatureExtractorRight = std::make_shared<FeatureExtractor>(nFeatures, nLevels, imScale, edgeThreshold, patchSize, maxFastThreshold, minFastThreshold);
   mFeatureMatcher = std::make_shared<FeatureMatcher>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight);
   mFeatureTracker = std::make_shared<FeatureTracker>(mStereoCamera, mFeatureExtractorLeft, mFeatureExtractorRight, mMap);
-  std::cout << "Stereo Camera Initialized.." << std::endl;
 }
 
 void VSlamSystem::GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera)
 {
   stereoCamera = mStereoCamera;
-}
-
-void VSlamSystem::StartSystem()
-{
-  // if (mMode == SlamMode::MONOCULAR)
-  //   TrackMonoCular();
-  // else
-  //   TrackStereo();
-    
 }
 
 void VSlamSystem::ExitSystem()
@@ -84,12 +73,12 @@ void VSlamSystem::ExitSystem()
 
 void VSlamSystem::TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb)
 {
-  mFeatureTracker->TrackImageT(imLRect, imRRect, frameNumb);
+  mFeatureTracker->TrackImage(imLRect, imRRect, frameNumb);
 }
 
 void VSlamSystem::TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUDataVal)
 {
-  mFeatureTracker->TrackImageT(imLRect, imRRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
+  mFeatureTracker->TrackImage(imLRect, imRRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
 }
 
 void VSlamSystem::TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, const IMUData& IMUDataVal)
@@ -97,43 +86,4 @@ void VSlamSystem::TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, cons
   mFeatureTracker->TrackImageMonoIMU(imLRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
 }
 
-void VSlamSystem::SaveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition)
-{
-    // std::vector<KeyFrame*>& allFrames = map->allFramesPoses;
-    // KeyFrame* closeKF = allFrames[0];
-    // std::ofstream datafile(filepath);
-    // std::ofstream datafilePos(filepathPosition);
-    // std::vector<KeyFrame*>::iterator it;
-    // std::vector<KeyFrame*>::const_iterator end(allFrames.end());
-    // for ( it = allFrames.begin(); it != end; it ++)
-    // {
-    //     KeyFrame* candKF = *it;
-    //     Eigen::Matrix4d matT;
-    //     if ( candKF->keyF )
-    //     {
-    //         matT = candKF->pose.pose;
-    //         closeKF = candKF;
-    //     }
-    //     else
-    //     {
-    //         matT = (closeKF->pose.getPose() * candKF->pose.refPose);
-    //     }
-    //     Eigen::Matrix4d mat = matT.transpose();
-    //     for (int32_t i{0}; i < 12; i ++)
-    //     {
-    //         if ( i == 0 )
-    //             datafile << mat(i);
-    //         else
-    //             datafile << " " << mat(i);
-    //         if ( i == 3 || i == 7 || i == 11 )
-    //             datafilePos << mat(i) << " ";
-    //     }
-    //     datafile << '\n';
-    //     datafilePos << '\n';
-    // }
-    // datafile.close();
-    // datafilePos.close();
-
-}
-
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

@@ -5,14 +5,13 @@
 #include "KeyFrame.h"
 #include "FeatureMatcher.h"
 #include "Settings.h"
-#include "Optimizer.h"
 #include <fstream>
 #include <string>
 #include <iostream>
 #include <random>
 #include <unordered_map>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 class KeyFrame;
@@ -27,16 +26,22 @@ class MapPoint
         Eigen::Vector3d wp3d;
         int unMCnt {0};
         std::vector<cv::KeyPoint> obs;
+
+        // last observation
         cv::KeyPoint lastObsL;
         cv::KeyPoint lastObsR;
         KeyFrame* lastObsKF;
+
+        // the descriptor
         cv::Mat desc;
+
+        // with which keyframes the mappoint has matched
         std::unordered_map<KeyFrame*, std::pair<int,int>> kFMatches;
-        std::unordered_map<KeyFrame*, std::pair<int,int>> kFMatchesB;
 
-
+        // if it was triangulated for Monocular 
         bool monoInitialized {false};
 
+        // BA variables
         int LBAID {-1};
         int LCID {-1};
 
@@ -64,17 +69,20 @@ class MapPoint
         void update(KeyFrame* kF);
         void update(KeyFrame* kF, const bool back);
         int predictScale(float dist);
+
+        // Connections with keyframe
         void addConnection(KeyFrame* kF, const std::pair<int,int>& keyPos);
         void addConnectionMono(KeyFrame* kF, const std::pair<int,int>& keyPos);
-
         void eraseKFConnection(KeyFrame* kF);
-        void eraseKFConnectionB(KeyFrame* kF);
+
         void setActive(bool act);
         void SetInFrame(bool infr);
         void SetIsOutlier(bool isOut);
         bool getActive() const;
         bool GetIsOutlier() const;
         bool GetInFrame() const;
+
+        // calculate a robust descriptor. Get all matched descriptors and choose the closest between them (median)
         void calcDescriptor();
         MapPoint(const Eigen::Vector4d& p, const cv::Mat& _desc, const cv::KeyPoint& obsK, const unsigned long _kdx, const unsigned long _idx);
 
@@ -91,16 +99,17 @@ class Map
 
     public:
 
-        bool aprilTagDetected {false};
 
         bool endOfFrames {false};
 
         std::unordered_map<unsigned long, KeyFrame*> keyFrames;
         std::unordered_map<unsigned long, MapPoint*> mapPoints;
         std::vector<MapPoint*> activeMapPoints;
-        std::vector<MapPoint*> activeMapPointsB;
         std::vector<KeyFrame*> allFramesPoses;
+
+        // keyframe index
         unsigned long kIdx {0};
+        // mappoint index
         unsigned long pIdx {0};
         
         bool keyFrameAdded {false};
@@ -121,11 +130,13 @@ class Map
         void addMapPoint(MapPoint* mp);
         void addKeyFrame(KeyFrame* kF);
         void removeKeyFrame(int idx);
+
+        // map mutex to ensure multithread safety
         mutable std::mutex mapMutex;
 
     protected:
 };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 #endif // MAP_H

@@ -96,10 +96,8 @@ src/FeatureExtractor.cpp
 src/FeatureTracker.cpp
 src/FeatureMatcher.cpp
 src/KeyFrame.cpp
-src/Optimizer.cpp
 src/OptimizationBA.cpp
 include/OptimizationBA.h
-include/Optimizer.h
 include/KeyFrame.h
 include/FeatureMatcher.h
 include/FeatureTracker.h
@@ -183,6 +181,9 @@ gtsam
 
 add_executable(VIOSlam src/VIOSlam.cpp)
 target_link_libraries(VIOSlam ${PROJECT_NAME})
+
+add_executable(VIOSlamKITTI src/VIOSlamKITTI.cpp)
+target_link_libraries(VIOSlamKITTI ${PROJECT_NAME})
 
 add_executable(VIOSlamMono src/VIOSlamMono.cpp)
 target_link_libraries(VIOSlamMono ${PROJECT_NAME})

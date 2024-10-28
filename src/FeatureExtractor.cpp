@@ -1,8 +1,9 @@
 #include "FeatureExtractor.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
+// bit pattern used in ORB features
 static int bit_pattern_31_[256*4] =
 {
         8,-3, 9,5/*mean (0), correlation (0)*/,
@@ -680,4 +681,4 @@ FeatureExtractor::FeatureExtractor(const int _nfeatures, const int _nLevels, con
     
 }
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

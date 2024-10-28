@@ -9,7 +9,7 @@
 #include <thread>
 #include <string>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
   class VSlamSystem
@@ -20,6 +20,7 @@ namespace TII
     
       enum class SlamMode
       {
+        STEREO_IMU,
         STEREO,
         MONOCULAR
       };
@@ -28,12 +29,10 @@ namespace TII
       void InitializeMonocular();
       void InitializeStereo();
       void GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera);
-      void StartSystem();
       void TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, const IMUData& IMUDataVal);
       void TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb);
       void TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUData);
       void ExitSystem();
-      void SaveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition);
     private:
 
     std::thread mFeatureTrackingThread;
@@ -56,7 +55,7 @@ namespace TII
     SlamMode mMode;
   };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // SYSTEM_H

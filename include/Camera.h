@@ -11,7 +11,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
   class CameraPose
@@ -106,7 +106,7 @@ namespace TII
 
   };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // CAMERA_H

@@ -5,7 +5,7 @@
 #include <yaml-cpp/yaml.h>
 #include <chrono>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 class ConfigFile
@@ -29,7 +29,7 @@ class ConfigFile
         }
 };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 
 #endif // SETTINGS_H

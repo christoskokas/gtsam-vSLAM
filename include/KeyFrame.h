@@ -8,7 +8,7 @@
 #include "opencv2/core.hpp"
 
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 class Map;
@@ -44,7 +44,7 @@ class KeyFrame
         std::shared_ptr<IMUData> mIMUData;
 
 
-        TrackedKeys keys, keysB;
+        TrackedKeys keys;
         Eigen::MatrixXd homoPoints3D;
         const unsigned long numb;
         const int frameIdx;
@@ -61,22 +61,26 @@ class KeyFrame
 
         void updatePose(const Eigen::Matrix4d& keyPose);
 
+        // calculate connections between KFs
         void calcConnections();
 
-
+        // erase mappoint connection from keyframe
         void eraseMPConnection(const int mpPos);
         void eraseMPConnection(const std::pair<int,int>& mpPos);
         void eraseMPConnectionR(const int mpPos);
+
         KeyFrame(Eigen::Matrix4d _pose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         KeyFrame(const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         KeyFrame(const std::shared_ptr<StereoCamera> _zedCam, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         Eigen::Vector4d getWorldPosition(int idx);
+        
+        // Get the connected KFs
         void getConnectedKFs(std::vector<KeyFrame*>& activeKF, const int N);
         void getConnectedKFsLC(std::shared_ptr<Map> map, std::vector<KeyFrame*>& activeKF);
 
         Eigen::Matrix4d getPose();
 };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 #endif // KEYFRAME_H

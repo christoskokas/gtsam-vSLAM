@@ -1,6 +1,6 @@
 #include "Visualization.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 
@@ -89,7 +89,7 @@ void Visualizer::DrawPoints()
   auto cloudBuffer = std::make_shared<glk::PointCloudBuffer>(points);
   cloudBuffer->add_color(colors);
 
-  auto shaderSetting = guik::VertexColor().set_point_scale(2.0f);
+  auto shaderSetting = guik::VertexColor().set_point_scale(0.5f);
   mViewer->update_drawable("points", cloudBuffer, shaderSetting);
 }
 
@@ -107,6 +107,11 @@ void Visualizer::DrawKeyFrames()
         if (!(*it).second->visualize)
             continue;
         Eigen::Matrix4d keyPose = (*it).second->getPose();
+        if (it->second->numb == 0)
+        {
+          DrawCamera(keyPose, {1.0f, 0.0f, 0.0f, 1.0f}, "First Pose" +   std::to_string(it->second->numb), 5.0f);
+          continue;
+        }
         DrawCamera(keyPose, {0.0f, 0.0f, 1.0f, 1.0f}, "keyframe_" + std::to_string(it->second->numb), 0.5f);
 
     }
@@ -124,6 +129,8 @@ void Visualizer::RenderScene() {
   // float angle = 0.0f;
 
   mViewer->disable_xy_grid();
+
+  mViewer->set_clear_color({0.0f, 0.0f, 0.0f, 1.0f});
 
   mViewer->register_ui_callback("ui", [&]() {
     // In the callback, you can call ImGui commands to create your UI.
@@ -149,4 +156,4 @@ void Visualizer::RenderScene() {
   
 }
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

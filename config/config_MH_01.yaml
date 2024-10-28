@@ -3,17 +3,17 @@
 rectified: false
 
 #number of frames in dataset only used for non-real-time
-numOfFrames: 1710
 seq: "00"
 
-# For real-time. image path of front camera
-leftPathCam : "/cam0/image_raw"
-rightPathCam : "/cam1/image_raw"
+# 0 Stereo IMU
+# 1 Stereo 
+# 2 Monocular IMU
+slamMode: 0
 
-# path to image folder ( if not real-time )
+dataset : "EuRoC"
+
+# path to image folder 
 imagesPath: "/home/christos/Downloads/MH_01_easy/mav0/"
-
-ImageFileNamePath: "/home/christos/Downloads/MH_01_easy/mav0/cam0/"
 
 IMU:
   Path: "/home/christos/Downloads/MH_01_easy/mav0/imu0/"

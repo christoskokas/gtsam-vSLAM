@@ -12,7 +12,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <opencv2/video/tracking.hpp>
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 class Map;
@@ -64,6 +64,6 @@ class FeatureMatcher
 
 };
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
 
 #endif // FEATUREMATCHER_H

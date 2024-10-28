@@ -1,6 +1,6 @@
 #include "KeyFrame.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 void KeyFrame::updatePose(const Eigen::Matrix4d& keyPose)
@@ -202,4 +202,4 @@ Eigen::Matrix4d KeyFrame::getPose()
     return pose.pose;
 }
 
-} // namespace TII
+} // namespace GTSAM_VIOSLAM

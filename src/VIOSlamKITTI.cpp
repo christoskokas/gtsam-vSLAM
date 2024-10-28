@@ -95,8 +95,9 @@ bool getImageTimestamps(std::vector<std::string>& fileNameVec, std::vector<doubl
         timestamp = stod(token);
 
         getline(ss, token, ',');
-        const std::string fileName = token;
-        
+        std::string fileName = token;
+        if (fileName.back() == '\r')
+            fileName.erase(fileName.size() - 1);
         // Add the data to the vectors
         timestampsVec.push_back(timestamp);
         fileNameVec.push_back(fileName);
@@ -112,28 +113,38 @@ int main(int argc, char **argv)
 {
     if ( argc < 2 )
     {
-        std::cerr << "No config file given.. Usage : ./VIOSlam config_file_name (e.g. ./VIOSlam config.yaml)" << std::endl;
+        std::cerr << "No config file given.. Usage : ./VIOSlam config_file_name (e.g. ./VIOSlamKITTI config.yaml)" << std::endl;
 
         return -1;
     }
     std::string file = argv[1];
-    auto confFile = std::make_shared<TII::ConfigFile>(file.c_str());
-    auto slamSystem = std::make_shared<TII::VSlamSystem>(confFile);
+    auto confFile = std::make_shared<GTSAM_VIOSLAM::ConfigFile>(file.c_str());
 
-    std::shared_ptr<TII::StereoCamera> StereoCam;
+    GTSAM_VIOSLAM::VSlamSystem::SlamMode slamMode = GTSAM_VIOSLAM::VSlamSystem::SlamMode::STEREO;
+
+    auto slamSystem = std::make_shared<GTSAM_VIOSLAM::VSlamSystem>(confFile, slamMode);
+
+    switch (slamMode)
+    {
+    case GTSAM_VIOSLAM::VSlamSystem::SlamMode::STEREO_IMU:
+        std::cout << "Stereo IMU Mode Selected.." << std::endl;
+        break;
+    case GTSAM_VIOSLAM::VSlamSystem::SlamMode::MONOCULAR:
+        std::cout << "Monocular IMU Mode Selected.." << std::endl;
+        break;
+    default:
+        std::cout << "Stereo Mode Selected.." << std::endl;
+        break;
+    }
+
+    std::shared_ptr<GTSAM_VIOSLAM::StereoCamera> StereoCam;
 
     slamSystem->GetStereoCamera(StereoCam);
 
-    const size_t nFrames {StereoCam->numOfFrames};
-    std::vector<std::string>leftImagesStr, rightImagesStr;
-    leftImagesStr.reserve(nFrames);
-    rightImagesStr.reserve(nFrames);
-
     const std::string imagesPath = confFile->getValue<std::string>("imagesPath");
 
-    const std::string leftPath = imagesPath + "left/";
-    const std::string rightPath = imagesPath + "right/";
-    const std::string fileExt = confFile->getValue<std::string>("fileExtension");
+    const std::string leftPath = imagesPath + "cam0/data/";
+    const std::string rightPath = imagesPath + "cam1/data/";
 
     const std::string IMUDataPath = confFile->getValue<std::string>("IMU","Path");
     const int IMUHz = confFile->getValue<int>("IMU","Hz");
@@ -142,27 +153,66 @@ int main(int argc, char **argv)
     const double IMUAccelNoiseDensity = confFile->getValue<double>("IMU","accelerometer_noise_density");
     const double IMUAccelRandomWalk = confFile->getValue<double>("IMU","accelerometer_random_walk");
 
-    StereoCam->mCameraLeft->mIMUData = std::make_shared<TII::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk);
+    StereoCam->mCameraLeft->mIMUData = std::make_shared<GTSAM_VIOSLAM::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
 
-    TII::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk);
+    GTSAM_VIOSLAM::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
 
     bool IMUDataValid = getAllIMUData(allIMUData.mAngleVelocity, allIMUData.mAcceleration, allIMUData.mTimestamps, IMUDataPath + "data.csv");
 
-    const std::string ImageFileNamePath = confFile->getValue<std::string>("ImageFileNamePath");
+    const std::string ImageFileNamePath = imagesPath + "cam0/";
     std::vector<std::string> ImageFileNamesVec;
     std::vector<double> imageTimestamps;
 
     bool imageTimestampsValid = getImageTimestamps(ImageFileNamesVec, imageTimestamps, ImageFileNamePath + "data.csv");
 
-    const size_t imageNumbLength = 6;
-
-    for ( size_t i {0}; i < nFrames; i++)
+    const size_t numberFrames {ImageFileNamesVec.size()};
+    std::vector<std::string>leftImagesStr, rightImagesStr;
+    leftImagesStr.reserve(numberFrames);
+    rightImagesStr.reserve(numberFrames);
+    for ( const auto& imageName : ImageFileNamesVec)
     {
-        std::string frameNumb = std::to_string(i);
-        std::string frameStr = std::string(imageNumbLength - std::min(imageNumbLength, frameNumb.length()), '0') + frameNumb;
-        leftImagesStr.emplace_back(leftPath + frameStr + fileExt);
-        rightImagesStr.emplace_back(rightPath + frameStr + fileExt);
+        leftImagesStr.emplace_back(leftPath + imageName);
+        rightImagesStr.emplace_back(rightPath + imageName);
     }
+
+    auto IMUDataPerFrame = std::vector<GTSAM_VIOSLAM::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
+    if (IMUDataValid && imageTimestampsValid)
+    {
+        const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};
+        const size_t IMUDataPerFrameSize {static_cast<size_t>(std::round(IMUHz / StereoCam->mFps)) + 1};
+        int frameNumb {0};
+        double frameTimestamp {imageTimestamps[frameNumb]};
+        double nextFrameTimestamp {imageTimestamps[frameNumb + 1]};
+        IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
+        IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
+        IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
+        for (size_t i = 0; i < IMUDataSize; ++i)
+        {
+            const auto& IMUTimestamp = allIMUData.mTimestamps[i];
+            if (IMUTimestamp > frameTimestamp && IMUTimestamp > nextFrameTimestamp)
+            {
+                frameNumb ++;
+                frameTimestamp = imageTimestamps[frameNumb];
+                nextFrameTimestamp = imageTimestamps[frameNumb + 1];
+                IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
+                IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
+                IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
+            }
+            auto& IMUFrame = IMUDataPerFrame[frameNumb];
+            if (IMUTimestamp > frameTimestamp && IMUTimestamp < nextFrameTimestamp)
+            {
+                const auto& angleVel = allIMUData.mAngleVelocity[i];
+                const auto& accel = allIMUData.mAcceleration[i];
+
+                IMUFrame.mAngleVelocity.emplace_back(angleVel);
+                IMUFrame.mAcceleration.emplace_back(accel);
+                IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
+            }
+        }
+
+    }
+
+    StereoCam->mCameraLeft->mIMUGravity = {IMUDataPerFrame[0].mAcceleration[0](1), -IMUDataPerFrame[0].mAcceleration[0](0),IMUDataPerFrame[0].mAcceleration[0](2)};
 
     cv::Mat rectMap[2][2];
     const int width = StereoCam->mWidth;
@@ -175,11 +225,9 @@ int main(int argc, char **argv)
         cv::initUndistortRectifyMap(StereoCam->mCameraRight->K, StereoCam->mCameraRight->D, StereoCam->mCameraRight->R, StereoCam->mCameraRight->P.rowRange(0,3).colRange(0,3), cv::Size(width, height), CV_32F, rectMap[1][0], rectMap[1][1]);
     }
 
-    double timeBetFrames = 1.0/StereoCam->mFps;
 
-    for ( size_t frameNumb{0}; frameNumb < nFrames; frameNumb++)
+    for ( size_t frameNumb{0}; frameNumb < numberFrames; frameNumb++)
     {
-        auto start = std::chrono::high_resolution_clock::now();
 
         cv::Mat imageLeft = cv::imread(leftImagesStr[frameNumb],cv::IMREAD_COLOR);
         cv::Mat imageRight = cv::imread(rightImagesStr[frameNumb],cv::IMREAD_COLOR);
@@ -197,14 +245,10 @@ int main(int argc, char **argv)
             imRRect = imageRight.clone();
         }
 
-        slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
-
-
-        auto end = std::chrono::high_resolution_clock::now();
-        double duration = std::chrono::duration_cast<std::chrono::duration<double> >(end - start).count();
-
-        if ( duration < timeBetFrames )
-            usleep((timeBetFrames-duration)*1e6);
+        if (IMUDataValid && slamMode == GTSAM_VIOSLAM::VSlamSystem::SlamMode::STEREO_IMU)
+            slamSystem->TrackStereoIMU(imLRect, imRRect, frameNumb, IMUDataPerFrame[frameNumb]);
+        else
+            slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
 
         if ( flag == 1 )
             break;
@@ -216,9 +260,6 @@ int main(int argc, char **argv)
     }
     std::cout << "System Shutdown!" << std::endl;
     slamSystem->ExitSystem();
-    std::cout << "Saving Trajectory.." << std::endl;
-    slamSystem->SaveTrajectoryAndPosition("single_cam_im_tra.txt", "single_cam_im_pos.txt");
-    std::cout << "Trajectory Saved!" << std::endl;
     exit(SIGINT);
 
 

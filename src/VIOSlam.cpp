@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <yaml-cpp/yaml.h>
 #include <signal.h>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 volatile sig_atomic_t flag = 0;
 
@@ -109,56 +112,29 @@ bool getImageTimestamps(std::vector<std::string>& fileNameVec, std::vector<doubl
     return true;
 }
 
-// Function to transform IMU data to camera frame
-void transformIMUToCameraFrame(
-    const Eigen::Vector3d& angular_velocity_imu,  // Angular velocity in IMU frame
-    const Eigen::Vector3d& linear_acceleration_imu, // Linear acceleration in IMU frame
-    const Eigen::Matrix3d& R_imu_to_cam,           // Rotation matrix from IMU to camera frame
-    const Eigen::Vector3d& t_imu_to_cam,           // Translation vector from IMU to camera frame
-    Eigen::Vector3d& angular_velocity_cam,         // Transformed angular velocity in camera frame
-    Eigen::Vector3d& linear_acceleration_cam       // Transformed linear acceleration in camera frame
-) {
-    // Transform angular velocity to the camera frame
-    angular_velocity_cam = R_imu_to_cam * angular_velocity_imu;
-
-    // Compute the cross-product terms for linear acceleration transformation
-    Eigen::Vector3d omega_cross_r = angular_velocity_cam.cross(t_imu_to_cam);
-    Eigen::Vector3d omega_cross_omega_cross_r = angular_velocity_cam.cross(omega_cross_r);
-
-    // Transform linear acceleration to the camera frame
-    linear_acceleration_cam = R_imu_to_cam * (linear_acceleration_imu - omega_cross_omega_cross_r);
-}
-
-// Function to transform IMU data to camera frame
-void transformIMUToCameraFrame2(
-    const Eigen::Vector3d& angular_velocity_imu,  // Angular velocity in IMU frame
-    const Eigen::Vector3d& linear_acceleration_imu, // Linear acceleration in IMU frame
-    const Eigen::Matrix4d& T_imu_to_cam, 
-    Eigen::Vector3d& angular_velocity_cam,         // Transformed angular velocity in camera frame
-    Eigen::Vector3d& linear_acceleration_cam       // Transformed linear acceleration in camera frame
-) {
-    // Transform angular velocity to the camera frame
-    Eigen::Vector4d angV4(angular_velocity_imu(0), angular_velocity_imu(1), angular_velocity_imu(2),1.0);
-    Eigen::Vector4d accV4(linear_acceleration_cam(0), linear_acceleration_cam(1), linear_acceleration_cam(2),1.0);
-    
-    Eigen::Vector4d angTV4 = T_imu_to_cam * angV4;
-    Eigen::Vector4d accTV4 = T_imu_to_cam * accV4;
-
-    angular_velocity_cam = Eigen::Vector3d(angTV4(0), angTV4(1), angTV4(2));
-    linear_acceleration_cam = Eigen::Vector3d(accTV4(0), accTV4(1), accTV4(2));
-}
-
-Eigen::Vector3d transformAngularVelocity(const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam) {
-    return R_imu_to_cam * imu_angular_velocity;
-}
-
-Eigen::Vector3d transformLinearAcceleration(const Eigen::Vector3d& imu_linear_acceleration, const Eigen::Vector3d& imu_angular_velocity, const Eigen::Matrix3d& R_imu_to_cam, const Eigen::Vector3d& t_imu_to_cam) 
+void getImageNames(const fs::path& directoryPath, std::vector<std::string>& imageNames) 
 {
-    Eigen::Vector3d omega = imu_angular_velocity;
-    Eigen::Vector3d acc_adjusted = imu_linear_acceleration;
-    Eigen::Vector3d centripetal = -omega.cross(omega.cross(t_imu_to_cam));
-    acc_adjusted += centripetal;
-    return R_imu_to_cam * acc_adjusted;
+    int fileCount = 0;
+    if (fs::exists(directoryPath) && fs::is_directory(directoryPath)) 
+    {
+        for (const auto& entry : fs::directory_iterator(directoryPath)) 
+        {
+            if (fs::is_regular_file(entry) && entry.path().extension() == ".png") 
+            {
+                ++fileCount;
+            }
+        }
+    } else 
+    {
+        std::cerr << "Directory does not exist or is not a directory." << std::endl;
+    }
+
+    // Add filenames manually in the required format
+    for (int i = 0; i < fileCount; ++i) {
+        std::ostringstream oss;
+        oss << std::setw(6) << std::setfill('0') << i << ".png"; // Format as 000000.png, 000001.png, etc.
+        imageNames.push_back(oss.str());
+    }
 }
 
 int main(int argc, char **argv)
@@ -170,38 +146,61 @@ int main(int argc, char **argv)
         return -1;
     }
     std::string file = argv[1];
-    auto confFile = std::make_shared<TII::ConfigFile>(file.c_str());
-    auto slamSystem = std::make_shared<TII::VSlamSystem>(confFile);
+    auto confFile = std::make_shared<GTSAM_VIOSLAM::ConfigFile>(file.c_str());
 
-    std::shared_ptr<TII::StereoCamera> StereoCam;
+    const auto slamMode = static_cast<GTSAM_VIOSLAM::VSlamSystem::SlamMode>(confFile->getValue<int>("slamMode"));
+
+    std::cout << " slam : " << static_cast<int>(slamMode) << std::endl;
+    auto slamSystem = std::make_shared<GTSAM_VIOSLAM::VSlamSystem>(confFile, slamMode);
+
+    bool hasIMU {false};
+    switch (slamMode)
+    {
+    case GTSAM_VIOSLAM::VSlamSystem::SlamMode::STEREO_IMU:
+        std::cout << "Stereo IMU Mode Selected.." << std::endl;
+        hasIMU = true;
+        break;
+    case GTSAM_VIOSLAM::VSlamSystem::SlamMode::MONOCULAR:
+        std::cout << "Monocular IMU Mode Selected.." << std::endl;
+        hasIMU = true;
+        break;
+    default:
+        std::cout << "Stereo Mode Selected.." << std::endl;
+        break;
+    }
+
+    std::shared_ptr<GTSAM_VIOSLAM::StereoCamera> StereoCam;
 
     slamSystem->GetStereoCamera(StereoCam);
 
-    // const size_t nFrames {StereoCam->numOfFrames};
-
     const std::string imagesPath = confFile->getValue<std::string>("imagesPath");
 
-    const std::string leftPath = imagesPath + "cam0/data/";
-    const std::string rightPath = imagesPath + "cam1/data/";
+    const std::string dataset = confFile->getValue<std::string>("dataset");
 
-    const std::string IMUDataPath = confFile->getValue<std::string>("IMU","Path");
-    const int IMUHz = confFile->getValue<int>("IMU","Hz");
-    const double IMUGyroNoiseDensity = confFile->getValue<double>("IMU","gyroscope_noise_density");
-    const double IMUGyroRandomWalk = confFile->getValue<double>("IMU","gyroscope_random_walk");
-    const double IMUAccelNoiseDensity = confFile->getValue<double>("IMU","accelerometer_noise_density");
-    const double IMUAccelRandomWalk = confFile->getValue<double>("IMU","accelerometer_random_walk");
-
-    StereoCam->mCameraLeft->mIMUData = std::make_shared<TII::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
-
-    TII::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
-
-    bool IMUDataValid = getAllIMUData(allIMUData.mAngleVelocity, allIMUData.mAcceleration, allIMUData.mTimestamps, IMUDataPath + "data.csv");
-
-    const std::string ImageFileNamePath = confFile->getValue<std::string>("ImageFileNamePath");
     std::vector<std::string> ImageFileNamesVec;
     std::vector<double> imageTimestamps;
+    std::string leftPath;
+    std::string rightPath;
 
-    bool imageTimestampsValid = getImageTimestamps(ImageFileNamesVec, imageTimestamps, ImageFileNamePath + "data.csv");
+    if (dataset == "KITTI")
+    {
+        leftPath = imagesPath + "image_0/";
+        rightPath = imagesPath + "image_1/";
+        const std::string ImageFileNamePath = imagesPath + "image_0/";
+        getImageNames(ImageFileNamePath, ImageFileNamesVec);
+    }
+    else if (dataset == "EuRoC")
+    {
+        leftPath = imagesPath + "cam0/data/";
+        rightPath = imagesPath + "cam1/data/";
+        const std::string ImageFileNamePath = imagesPath + "cam0/";
+        getImageTimestamps(ImageFileNamesVec, imageTimestamps, ImageFileNamePath + "data.csv");
+    }
+    else
+    {
+        std::cout << "Only KITTI and EuRoC Dataset Supported.." << std::endl;
+        return -1;
+    }
 
     const size_t numberFrames {ImageFileNamesVec.size()};
     std::vector<std::string>leftImagesStr, rightImagesStr;
@@ -213,62 +212,66 @@ int main(int argc, char **argv)
         rightImagesStr.emplace_back(rightPath + imageName);
     }
 
-    // std::vector < double > tBIMU = confFile->getValue<std::vector<double>>("T_bc1", "data");
+    StereoCam->numOfFrames = numberFrames;
 
-    // Eigen::Matrix4d tBodyToImu;
-    // tBodyToImu = Eigen::Map<const Eigen::Matrix<double, 4, 4, Eigen::RowMajor>>(tBIMU.data());
+    bool IMUDataValid {false};
+    std::vector<GTSAM_VIOSLAM::IMUData>IMUDataPerFrame;
 
-    // Eigen::Matrix4d tBodyToImuInv = tBodyToImu.inverse();
-
-    // Get all the IMU Data between each new frame for pre Integration
-    auto IMUDataPerFrame = std::vector<TII::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
-    if (IMUDataValid && imageTimestampsValid)
+    if (hasIMU)
     {
-        const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};
-        const size_t IMUDataPerFrameSize {static_cast<size_t>(std::round(IMUHz / StereoCam->mFps)) + 1};
-        int frameNumb {0};
-        double frameTimestamp {imageTimestamps[frameNumb]};
-        double nextFrameTimestamp {imageTimestamps[frameNumb + 1]};
-        IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
-        IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
-        IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
-        for (size_t i = 0; i < IMUDataSize; ++i)
+        const std::string IMUDataPath = confFile->getValue<std::string>("IMU","Path");
+        const int IMUHz = confFile->getValue<int>("IMU","Hz");
+        const double IMUGyroNoiseDensity = confFile->getValue<double>("IMU","gyroscope_noise_density");
+        const double IMUGyroRandomWalk = confFile->getValue<double>("IMU","gyroscope_random_walk");
+        const double IMUAccelNoiseDensity = confFile->getValue<double>("IMU","accelerometer_noise_density");
+        const double IMUAccelRandomWalk = confFile->getValue<double>("IMU","accelerometer_random_walk");
+
+        StereoCam->mCameraLeft->mIMUData = std::make_shared<GTSAM_VIOSLAM::IMUData>(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
+
+        GTSAM_VIOSLAM::IMUData allIMUData(IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz);
+
+        IMUDataValid = getAllIMUData(allIMUData.mAngleVelocity, allIMUData.mAcceleration, allIMUData.mTimestamps, IMUDataPath + "data.csv");
+
+        IMUDataPerFrame = std::vector<GTSAM_VIOSLAM::IMUData>(numberFrames,{IMUGyroNoiseDensity, IMUGyroRandomWalk, IMUAccelNoiseDensity, IMUAccelRandomWalk, IMUHz});
+        if (IMUDataValid)
         {
-            const auto& IMUTimestamp = allIMUData.mTimestamps[i];
-            if (IMUTimestamp > frameTimestamp && IMUTimestamp > nextFrameTimestamp)
+            const size_t IMUDataSize {allIMUData.mAngleVelocity.size()};
+            const size_t IMUDataPerFrameSize {static_cast<size_t>(std::round(IMUHz / StereoCam->mFps)) + 1};
+            int frameNumb {0};
+            double frameTimestamp {imageTimestamps[frameNumb]};
+            double nextFrameTimestamp {imageTimestamps[frameNumb + 1]};
+            IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
+            IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
+            IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
+            for (size_t i = 0; i < IMUDataSize; ++i)
             {
-                frameNumb ++;
-                frameTimestamp = imageTimestamps[frameNumb];
-                nextFrameTimestamp = imageTimestamps[frameNumb + 1];
-                IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
-                IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
-                IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
+                const auto& IMUTimestamp = allIMUData.mTimestamps[i];
+                if (IMUTimestamp > frameTimestamp && IMUTimestamp > nextFrameTimestamp)
+                {
+                    frameNumb ++;
+                    frameTimestamp = imageTimestamps[frameNumb];
+                    nextFrameTimestamp = imageTimestamps[frameNumb + 1];
+                    IMUDataPerFrame[frameNumb].mAngleVelocity.reserve(IMUDataPerFrameSize);
+                    IMUDataPerFrame[frameNumb].mAcceleration.reserve(IMUDataPerFrameSize);
+                    IMUDataPerFrame[frameNumb].mTimestamps.reserve(IMUDataPerFrameSize);
+                }
+                auto& IMUFrame = IMUDataPerFrame[frameNumb];
+                if (IMUTimestamp > frameTimestamp && IMUTimestamp < nextFrameTimestamp)
+                {
+                    const auto& angleVel = allIMUData.mAngleVelocity[i];
+                    const auto& accel = allIMUData.mAcceleration[i];
+
+                    IMUFrame.mAngleVelocity.emplace_back(angleVel);
+                    IMUFrame.mAcceleration.emplace_back(accel);
+                    IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
+                }
             }
-            auto& IMUFrame = IMUDataPerFrame[frameNumb];
-            if (IMUTimestamp > frameTimestamp && IMUTimestamp < nextFrameTimestamp)
-            {
-                const auto& angleVel = allIMUData.mAngleVelocity[i];
-                const auto& accel = allIMUData.mAcceleration[i];
 
-                // Eigen::Vector3d angleCamFrame, accelCamFrame;
-
-                // transformIMUToCameraFrame2(angleVel, accel, tBodyToImu, angleCamFrame, accelCamFrame);
-                // // transformIMUToCameraFrame(angleVel, accel, tBodyToImuInv.block<3,3>(0,0), tBodyToImuInv.block<3,1>(0,3), angleCamFrame, accelCamFrame);
-
-                // Eigen::Matrix3d RImu = tBodyToImuInv.block<3,3>(0,0);
-                // Eigen::Vector3d tImu = tBodyToImuInv.block<3,1>(0,3);
-                // Eigen::Vector3d angleCamFrame = transformAngularVelocity(angleVel, RImu);
-                // Eigen::Vector3d accelCamFrame = transformLinearAcceleration(accel, angleVel, RImu, tImu);
-
-                IMUFrame.mAngleVelocity.emplace_back(angleVel);
-                IMUFrame.mAcceleration.emplace_back(accel);
-                IMUFrame.mTimestamps.emplace_back(IMUTimestamp);
-            }
         }
 
-    }
+        StereoCam->mCameraLeft->mIMUGravity = {IMUDataPerFrame[0].mAcceleration[0](1), -IMUDataPerFrame[0].mAcceleration[0](0),IMUDataPerFrame[0].mAcceleration[0](2)};
 
-    StereoCam->mCameraLeft->mIMUGravity = {IMUDataPerFrame[0].mAcceleration[0](1), -IMUDataPerFrame[0].mAcceleration[0](0),IMUDataPerFrame[0].mAcceleration[0](2)};
+    }
 
     cv::Mat rectMap[2][2];
     const int width = StereoCam->mWidth;
@@ -281,11 +284,9 @@ int main(int argc, char **argv)
         cv::initUndistortRectifyMap(StereoCam->mCameraRight->K, StereoCam->mCameraRight->D, StereoCam->mCameraRight->R, StereoCam->mCameraRight->P.rowRange(0,3).colRange(0,3), cv::Size(width, height), CV_32F, rectMap[1][0], rectMap[1][1]);
     }
 
-    // double timeBetFrames = 1.0/StereoCam->mFps;
 
     for ( size_t frameNumb{0}; frameNumb < numberFrames; frameNumb++)
     {
-        // auto start = std::chrono::high_resolution_clock::now();
 
         cv::Mat imageLeft = cv::imread(leftImagesStr[frameNumb],cv::IMREAD_COLOR);
         cv::Mat imageRight = cv::imread(rightImagesStr[frameNumb],cv::IMREAD_COLOR);
@@ -303,17 +304,10 @@ int main(int argc, char **argv)
             imRRect = imageRight.clone();
         }
 
-        if (IMUDataValid)
+        if (IMUDataValid && slamMode == GTSAM_VIOSLAM::VSlamSystem::SlamMode::STEREO_IMU)
             slamSystem->TrackStereoIMU(imLRect, imRRect, frameNumb, IMUDataPerFrame[frameNumb]);
         else
             slamSystem->TrackStereo(imLRect, imRRect, frameNumb);
-
-
-        // auto end = std::chrono::high_resolution_clock::now();
-        // double duration = std::chrono::duration_cast<std::chrono::duration<double> >(end - start).count();
-
-        // if ( duration < timeBetFrames )
-        //     usleep((timeBetFrames-duration)*1e6);
 
         if ( flag == 1 )
             break;
@@ -325,9 +319,6 @@ int main(int argc, char **argv)
     }
     std::cout << "System Shutdown!" << std::endl;
     slamSystem->ExitSystem();
-    std::cout << "Saving Trajectory.." << std::endl;
-    slamSystem->SaveTrajectoryAndPosition("single_cam_im_tra.txt", "single_cam_im_pos.txt");
-    std::cout << "Trajectory Saved!" << std::endl;
     exit(SIGINT);
 
 

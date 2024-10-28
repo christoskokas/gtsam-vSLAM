@@ -1,7 +1,7 @@
 #include "Camera.h"
 #include "Settings.h"
 
-namespace TII
+namespace GTSAM_VIOSLAM
 {
 
 CameraPose::CameraPose(Eigen::Matrix4d _pose, std::chrono::time_point<std::chrono::high_resolution_clock> _timestamp) : pose(_pose), timestamp(_timestamp)
@@ -45,7 +45,6 @@ void CameraPose::setInvPose(const Eigen::Matrix4d poseT)
 
 StereoCamera::StereoCamera(const std::shared_ptr<ConfigFile> configFile, std::shared_ptr<Camera> cameraLeft, std::shared_ptr<Camera> cameraRight) : mConfigFile(configFile), mCameraLeft(cameraLeft), mCameraRight(cameraRight)
 {
-  numOfFrames = configFile->getValue<int>("numOfFrames"); 
   setCameraValues("Camera");
 }
 
@@ -118,4 +117,4 @@ void Camera::setIntrinsicValuesR(const std::string& cameraPath)
     intrinsics(0,2) = cx;
     intrinsics(1,2) = cy;
 }
-} // namespace TII
+} // namespace GTSAM_VIOSLAM
