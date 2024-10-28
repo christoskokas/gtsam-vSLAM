@@ -46,9 +46,6 @@ class FeatureTracker
         const int maxAddedStereo {100};
         const int minInliers {50};
 
-        // parallax threshold to consider triangulating new points (MONO)
-        const double parallaxThreshold {0.01};
-
         // MONO Params
         bool secondKF {false};
         int numOfMonoMPs {0};
@@ -64,10 +61,10 @@ class FeatureTracker
         int curFrame {0};
 
         ImageData lIm, rIm;
-        std::shared_ptr<StereoCamera> zedPtr;
-        std::shared_ptr<FeatureExtractor> feLeft;
-        std::shared_ptr<FeatureExtractor> feRight;
-        std::shared_ptr<Map> map;
+        std::shared_ptr<StereoCamera> zedPtr{nullptr};
+        std::shared_ptr<FeatureExtractor> feLeft{nullptr};
+        std::shared_ptr<FeatureExtractor> feRight{nullptr};
+        std::shared_ptr<Map> map{nullptr};
         FeatureMatcher fm;
         const double fx,fy,cx,cy;
 
@@ -160,9 +157,6 @@ class FeatureTracker
         // add the new mappoints to the map
         void addNewMapPoints(std::vector<MapPoint*>& pointsToAdd);
 
-        // Calculate parallax between 4d poses
-        double calculateParallaxAngle(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2);
-        bool isParallaxSufficient(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2, double threshold = 0.05);
 };
 
 

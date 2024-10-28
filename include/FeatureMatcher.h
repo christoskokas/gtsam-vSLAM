@@ -30,14 +30,14 @@ class FeatureMatcher
         const float ratioLBA {0.6};
 
 
-        const std::shared_ptr<StereoCamera> zedptr;
+        std::shared_ptr<StereoCamera> zedptr{nullptr};
 
     public:
         const int closeNumber {40};
-        const std::shared_ptr<FeatureExtractor> feLeft, feRight;
+        std::shared_ptr<FeatureExtractor> feLeft{nullptr}, feRight{nullptr};
         const int imageHeight;
 
-        FeatureMatcher(const std::shared_ptr<StereoCamera> _zed, const std::shared_ptr<FeatureExtractor> _feLeft, const std::shared_ptr<FeatureExtractor> _feRight, const int _imageHeight = 360);
+        FeatureMatcher(std::shared_ptr<StereoCamera> _zed, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, const int _imageHeight = 360);
 
         int matchByProjectionRPredLBA(const KeyFrame* lastKF, KeyFrame* newKF, std::vector<std::vector<std::pair<KeyFrame*,std::pair<int, int>>>>& matchedIdxs, const float rad, const std::vector<std::pair<cv::Point2f, cv::Point2f>>& predPoints, const std::vector<float>& maxDistsScale, std::vector<std::pair<Eigen::Vector4d,std::pair<int,int>>>& p4d);
 

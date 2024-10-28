@@ -46,7 +46,7 @@ void Visualizer::LineFromKeyFrameToCamera()
 
 void Visualizer::DrawCamera(const Eigen::Matrix4d& cameraPose, const Eigen::Vector4f& color, const std::string& cameraName, float width)
 {
-  std::shared_ptr<glk::ThinLines> lines;
+  std::shared_ptr<glk::ThinLines> lines{nullptr};
   GetCameraFrame(lines);
   lines->set_line_width(width);
   auto transformation = cameraPose;

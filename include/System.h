@@ -25,7 +25,7 @@ namespace GTSAM_VIOSLAM
         MONOCULAR
       };
 
-      VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode mode = SlamMode::STEREO);
+      VSlamSystem(std::shared_ptr<ConfigFile> configFile, SlamMode mode = SlamMode::STEREO){}
       void InitializeMonocular();
       void InitializeStereo();
       void GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera);
@@ -41,16 +41,16 @@ namespace GTSAM_VIOSLAM
     std::thread mOptimizerThread;
     std::thread mVisualizationThread;
 
-    std::shared_ptr<StereoCamera> mStereoCamera {};
-    std::shared_ptr<Camera> mMonoCamera {};
-    std::shared_ptr<Visualizer> mVisualizer;
-    std::shared_ptr<ConfigFile> mConfigFile;
-    std::shared_ptr<FeatureTracker> mFeatureTracker;
-    std::shared_ptr<FeatureExtractor> mFeatureExtractorLeft;
-    std::shared_ptr<FeatureExtractor> mFeatureExtractorRight;
-    std::shared_ptr<FeatureMatcher> mFeatureMatcher;
-    std::shared_ptr<LocalMapper> mLocalMapper;
-    std::shared_ptr<Map> mMap;
+    std::shared_ptr<StereoCamera> mStereoCamera {nullptr};
+    std::shared_ptr<Camera> mMonoCamera {nullptr};
+    std::shared_ptr<Visualizer> mVisualizer {nullptr};
+    std::shared_ptr<ConfigFile> mConfigFile {nullptr};
+    std::shared_ptr<FeatureTracker> mFeatureTracker {nullptr};
+    std::shared_ptr<FeatureExtractor> mFeatureExtractorLeft {nullptr};
+    std::shared_ptr<FeatureExtractor> mFeatureExtractorRight {nullptr};
+    std::shared_ptr<FeatureMatcher> mFeatureMatcher {nullptr};
+    std::shared_ptr<LocalMapper> mLocalMapper {nullptr};
+    std::shared_ptr<Map> mMap {nullptr};
     
     SlamMode mMode;
   };

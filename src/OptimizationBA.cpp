@@ -357,8 +357,8 @@ void LocalMapper::findNewPoints(std::vector<KeyFrame *>& activeKF)
             continue;
         // if (!Converter::isParallaxSufficient(lastKF->pose.pose, (*it)->pose.pose, Converter::parallaxThreshold))
         //     continue;
-        if (!Converter::checkSufficientMovement(lastKF->pose.pose, (*it)->pose.pose))
-            continue;
+        // if (!Converter::checkSufficientMovement(lastKF->pose.pose, (*it)->pose.pose))
+        //     continue;
         // std::cout << "check : " << Converter::checkSufficientMovement(lastKF->pose.pose, (*it)->pose.pose) << std::endl;
         std::vector<std::pair<cv::Point2f, cv::Point2f>> predPoints;
         // predict keys for both right and left camera

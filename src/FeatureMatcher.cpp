@@ -5,7 +5,7 @@
 namespace GTSAM_VIOSLAM
 {
 
-FeatureMatcher::FeatureMatcher(const std::shared_ptr<StereoCamera> _zed, const std::shared_ptr<FeatureExtractor> _feLeft, const std::shared_ptr<FeatureExtractor> _feRight, const int _imageHeight) : zedptr(_zed), feLeft(_feLeft), feRight(_feRight), imageHeight(_imageHeight)
+FeatureMatcher::FeatureMatcher(std::shared_ptr<StereoCamera> _zed, std::shared_ptr<FeatureExtractor> _feLeft, std::shared_ptr<FeatureExtractor> _feRight, const int _imageHeight) : zedptr(_zed), feLeft(_feLeft), feRight(_feRight), imageHeight(_imageHeight)
 {
 
 }

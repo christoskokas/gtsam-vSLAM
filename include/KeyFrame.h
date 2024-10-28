@@ -41,7 +41,7 @@ class KeyFrame
 
         bool LCCand {false};
 
-        std::shared_ptr<IMUData> mIMUData;
+        std::shared_ptr<IMUData> mIMUData{nullptr};
 
 
         TrackedKeys keys;
@@ -71,7 +71,7 @@ class KeyFrame
 
         KeyFrame(Eigen::Matrix4d _pose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         KeyFrame(const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
-        KeyFrame(const std::shared_ptr<StereoCamera> _zedCam, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
+        KeyFrame(std::shared_ptr<StereoCamera> _zedCam, const Eigen::Matrix4d& _refPose, const Eigen::Matrix4d& realPose, cv::Mat& _leftIm, cv::Mat& rLIm, const int _numb, const int _frameIdx);
         Eigen::Vector4d getWorldPosition(int idx);
         
         // Get the connected KFs

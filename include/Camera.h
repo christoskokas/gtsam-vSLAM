@@ -55,8 +55,8 @@ namespace GTSAM_VIOSLAM
   {
 
     public:
-    Camera(const std::shared_ptr<ConfigFile> configFile, const std::string& camPath);
-    const std::shared_ptr<ConfigFile> mConfigFile;
+    Camera(std::shared_ptr<ConfigFile> configFile, const std::string& camPath);
+    std::shared_ptr<ConfigFile> mConfigFile {nullptr};
     void setIntrinsicValuesUnR(const std::string& cameraPath);
     void setIntrinsicValuesR(const std::string& cameraPath);
     cv::Mat D = cv::Mat::zeros(1,5,CV_64F);
@@ -64,7 +64,7 @@ namespace GTSAM_VIOSLAM
     cv::Mat R = cv::Mat::eye(3,3,CV_64F);
     cv::Mat P = cv::Mat::eye(3,4,CV_64F);
 
-    std::shared_ptr<IMUData> mIMUData;
+    std::shared_ptr<IMUData> mIMUData {nullptr};
     Eigen::Vector3d mVelocity {0,0,0};
     Eigen::Vector3d mNewVelocity {0,0,0};
     Eigen::Vector3d mIMUGravity {0,0,0};
@@ -88,9 +88,9 @@ namespace GTSAM_VIOSLAM
     size_t numOfFrames {};
 
 
-    const std::shared_ptr<ConfigFile> mConfigFile;
-    std::shared_ptr<Camera> mCameraLeft;
-    std::shared_ptr<Camera> mCameraRight;
+    std::shared_ptr<ConfigFile> mConfigFile{nullptr};
+    std::shared_ptr<Camera> mCameraLeft{nullptr};
+    std::shared_ptr<Camera> mCameraRight{nullptr};
     CameraPose mCameraPose;
 
 
@@ -101,7 +101,7 @@ namespace GTSAM_VIOSLAM
     void setCameraValues(const std::string& camPath);
     
     public:
-    StereoCamera(const std::shared_ptr<ConfigFile> configFile, std::shared_ptr<Camera> cameraLeft, std::shared_ptr<Camera> cameraRight);
+    StereoCamera(std::shared_ptr<ConfigFile> configFile, std::shared_ptr<Camera> cameraLeft, std::shared_ptr<Camera> cameraRight);
     StereoCamera() {}
 
   };

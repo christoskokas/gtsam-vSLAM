@@ -38,7 +38,7 @@ class LocalMapper
         bool stopRequested {false};
 
         // the map
-        std::shared_ptr<Map> map;
+        std::shared_ptr<Map> map{nullptr};
 
         // reprojection threshold to find outliers
         const float reprjThreshold {7.815f};
@@ -46,9 +46,9 @@ class LocalMapper
         const int actvKFMaxSize {10};
         const int minCount {3};
 
-        std::shared_ptr<StereoCamera> zedPtr;
+        std::shared_ptr<StereoCamera> zedPtr{nullptr};
 
-        std::shared_ptr<FeatureMatcher> fm;
+        std::shared_ptr<FeatureMatcher> fm{nullptr};
         const double fx,fy,cx,cy;
 
         LocalMapper(std::shared_ptr<Map> _map, std::shared_ptr<StereoCamera> _zedPtr, std::shared_ptr<FeatureMatcher> _fm);

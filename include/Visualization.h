@@ -22,9 +22,9 @@ namespace GTSAM_VIOSLAM
     const float cameraWidth = 0.1575f;
     guik::LightViewer* mViewer;
 
-    const std::shared_ptr<StereoCamera> mStereoCamera;
+    std::shared_ptr<StereoCamera> mStereoCamera{nullptr};
 
-    const std::shared_ptr<Map> mMap;
+    std::shared_ptr<Map> mMap{nullptr};
 
     void GetCameraFrame(std::shared_ptr<glk::ThinLines>& lines);
     void LineFromKeyFrameToCamera();

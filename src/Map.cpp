@@ -210,7 +210,7 @@ void MapPoint::calcDescriptor()
     }
 }
 
-void MapPoint::updatePos(const Eigen::Vector3d& newPos, const std::shared_ptr<StereoCamera> zedPtr)
+void MapPoint::updatePos(const Eigen::Vector3d& newPos, std::shared_ptr<StereoCamera> zedPtr)
 {
     setWordPose3d(newPos);
     std::unordered_map<KeyFrame*, std::pair<int,int>>::iterator it;

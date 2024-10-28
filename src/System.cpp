@@ -3,26 +3,26 @@
 namespace GTSAM_VIOSLAM
 {
 
-VSlamSystem::VSlamSystem(const std::shared_ptr<ConfigFile> configFile, SlamMode mode /* = SlamMode::STEREO*/) : mConfigFile(configFile), mMode(mode)
-{
+// VSlamSystem::VSlamSystem(std::shared_ptr<ConfigFile> configFile, SlamMode mode /* = SlamMode::STEREO*/)
+// {
 
-  mMap = std::make_shared<Map>();
+//   // mMap = std::make_shared<Map>();
 
-  if (mode == SlamMode::MONOCULAR)
-  {
-    InitializeMonocular();
-  }
-  else
-  {
-    InitializeStereo();
-    mLocalMapper = std::make_shared<LocalMapper>(mMap, mStereoCamera, mFeatureMatcher);
-    mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);
-  }
+//   // if (mode == SlamMode::MONOCULAR)
+//   // {
+//   //   InitializeMonocular();
+//   // }
+//   // else
+//   // {
+//   //   InitializeStereo();
+//   //   mLocalMapper = std::make_shared<LocalMapper>(mMap, mStereoCamera, mFeatureMatcher);
+//   //   mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);
+//   // }
 
   
-  mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
-  mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
-}
+//   // mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
+//   // mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
+// }
 
 void VSlamSystem::InitializeMonocular()
 {

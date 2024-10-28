@@ -918,26 +918,6 @@ void FeatureTracker::insertKeyFrameMono(TrackedKeys& keysLeft, std::vector<int>&
     allFrames.emplace_back(kF);
 }
 
-double FeatureTracker::calculateParallaxAngle(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2) 
-{
-    Eigen::Matrix3d rotation1 = pose1.block<3,3>(0,0);
-    Eigen::Matrix3d rotation2 = pose2.block<3,3>(0,0);
-    
-    Eigen::Matrix3d relativeRotation = rotation1.transpose() * rotation2;
-    
-    // Compute the angle of rotation 
-    double trace = relativeRotation.trace();
-    double angle = std::acos(std::clamp((trace - 1.0) / 2.0, -1.0, 1.0));
-    
-    return abs(angle); // Angle in radians
-}
-
-bool FeatureTracker::isParallaxSufficient(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2, double threshold) 
-{
-    double parallaxAngle = calculateParallaxAngle(pose1, pose2);
-    return parallaxAngle > threshold;
-}
-
 void FeatureTracker::addFrame(const Eigen::Matrix4d& estimPose)
 {
     Eigen::Matrix4d referencePose =  latestKF->pose.getInvPose() * estimPose;
@@ -1392,9 +1372,7 @@ void FeatureTracker::TrackImageMonoIMU(const cv::Mat& leftRect, const int frameN
 
     Eigen::Matrix4d estimPose = predNPoseInv;
 
-    if(!isParallaxSufficient(zedPtr->mCameraPose.pose, predNPose, parallaxThreshold) && !monoInitialized)
-        return;
-    else if (!secondKF)
+    if (!secondKF)
     {
         feLeft->extractKeysNew(leftIm, keysLeft.keyPoints, keysLeft.Desc);
 
@@ -1574,8 +1552,6 @@ void FeatureTracker::addMappointsMono(std::vector<MapPoint*>& pointsToAdd, std::
     {
         if(keyF->numb == lastKF->numb)
             continue;
-        // if (!isParallaxSufficient(lastKF->pose.pose, keyF->pose.pose, parallaxThreshold))
-        //     continue;
         auto& lastKeys = lastKF->keys;
         auto& actKeys = keyF->keys;
         fm.matchByRadius(lastKeys, actKeys, matchedIdxsL, matchesIdxs, 120, keyframeIdxMatchs, keyF);

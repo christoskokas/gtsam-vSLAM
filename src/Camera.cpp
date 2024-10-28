@@ -43,7 +43,7 @@ void CameraPose::setInvPose(const Eigen::Matrix4d poseT)
     pose = poseT.inverse();
 }
 
-StereoCamera::StereoCamera(const std::shared_ptr<ConfigFile> configFile, std::shared_ptr<Camera> cameraLeft, std::shared_ptr<Camera> cameraRight) : mConfigFile(configFile), mCameraLeft(cameraLeft), mCameraRight(cameraRight)
+StereoCamera::StereoCamera(std::shared_ptr<ConfigFile> configFile, std::shared_ptr<Camera> cameraLeft, std::shared_ptr<Camera> cameraRight) : mConfigFile(configFile), mCameraLeft(cameraLeft), mCameraRight(cameraRight)
 {
   setCameraValues("Camera");
 }
@@ -62,7 +62,7 @@ IMUData::IMUData(double gyroNoiseDensity, double gyroRandomWalk, double accelNoi
 
 }
 
-Camera::Camera(const std::shared_ptr<ConfigFile> configFile, const std::string& camPath) : mConfigFile(configFile), mIMUData(nullptr)
+Camera::Camera(std::shared_ptr<ConfigFile> configFile, const std::string& camPath) : mConfigFile(configFile), mIMUData(nullptr)
 {
   rectified = configFile->getValue<bool>("rectified");
   if (rectified)

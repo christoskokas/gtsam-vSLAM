@@ -145,6 +145,7 @@ int main(int argc, char **argv)
 
         return -1;
     }
+    std::cout << "here" << std::endl;
     std::string file = argv[1];
     auto confFile = std::make_shared<GTSAM_VIOSLAM::ConfigFile>(file.c_str());
 
@@ -169,7 +170,7 @@ int main(int argc, char **argv)
         break;
     }
 
-    std::shared_ptr<GTSAM_VIOSLAM::StereoCamera> StereoCam;
+    std::shared_ptr<GTSAM_VIOSLAM::StereoCamera> StereoCam{nullptr};
 
     slamSystem->GetStereoCamera(StereoCam);
 
