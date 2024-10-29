@@ -1,0 +1,62 @@
+# Change the values according to your camera and setup
+
+rectified: true
+
+# 0 Stereo IMU
+# 1 Stereo 
+# 2 Monocular IMU
+slamMode: 1
+
+dataset : "KITTI"
+
+# path to image folder 
+imagesPath: "/home/christos/Downloads/data_odometry_gray/dataset/sequences/01/"
+
+# image extension
+fileExtension: ".png"
+
+# front camera params
+Camera_l:
+  fx: 7.188560000000e+02
+  fy: 7.188560000000e+02
+  cx: 6.071928000000e+02
+  cy: 1.852157000000e+02
+  k1: 0
+  k2: 0
+  p1: 0
+  p2: 0
+  k3: 0
+
+Camera_r:
+  fx: 7.188560000000e+02
+  fy: 7.188560000000e+02
+  cx: 6.071928000000e+02
+  cy: 1.852157000000e+02
+  k1: 0
+  k2: 0
+  p1: 0
+  p2: 0
+  k3: 0
+
+Camera:
+  width: 1241
+  height: 376
+  fps: 10.0
+  bl: 0.53716
+
+# Feature Extractor Values
+FE:
+  nFeatures: 2000
+  nLevels: 8
+  imScale: 1.2
+  edgeThreshold: 19
+  maxFastThreshold: 20
+  minFastThreshold: 7
+  patchSize: 31
+
+
+# Sensor extrinsics wrt. the body-frame.
+T_bc1:
+  cols: 4
+  rows: 4
+  data: [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975, 0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768, -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949, 0.0, 0.0, 0.0, 1.0]
