@@ -25,13 +25,14 @@ namespace GTSAM_VIOSLAM
         MONOCULAR
       };
 
-      VSlamSystem(std::shared_ptr<ConfigFile> configFile, SlamMode mode = SlamMode::STEREO){}
+      VSlamSystem(std::shared_ptr<ConfigFile> configFile, SlamMode mode = SlamMode::STEREO);
       void InitializeMonocular();
       void InitializeStereo();
       void GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera);
       void TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, const IMUData& IMUDataVal);
       void TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb);
       void TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb, const IMUData& IMUData);
+      void saveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition);
       void ExitSystem();
     private:
 

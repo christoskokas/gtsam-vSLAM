@@ -4,6 +4,7 @@ set(CMAKE_CXX_STANDARD 17) # Ensure all components use C++17
 # set(CMAKE_CXX_EXTENSIONS OFF)
 project(stereo_vio)
 
+# list(APPEND CMAKE_MODULE_PATH "/usr/local/lib/cmake/GTSAM")
 
 IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Release)
@@ -11,9 +12,13 @@ ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3 -g")  # -g for debugging
+option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
+
+if(ENABLE_ASAN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall   -O3")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3")
@@ -30,12 +35,19 @@ endif()
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
 
-find_package(PCL REQUIRED)
+include_directories(
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/include
+  ${YAML_CPP_INCLUDE_DIR}
+  )
 
-find_package(Eigen3 3.1.0 REQUIRED)
+find_package(Eigen3 3.3.7 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Iridescence REQUIRED)
 find_package(GTSAM REQUIRED)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_DONT_ALIGN_STATICALLY -DEIGEN_DONT_VECTORIZE")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_MALLOC_ALREADY_ALIGNED=0")
 
 add_library(${PROJECT_NAME} SHARED
 src/System.cpp
@@ -61,17 +73,9 @@ include/Settings.h
 include/Conversions.h
 )
 
-include_directories(
-  ${PCL_INCLUDE_DIRS} 
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/include
-  ${EIGEN3_INCLUDE_DIR}
-  ${YAML_CPP_INCLUDE_DIR}
-  )
-
+  
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
-${EIGEN3_LIBS}
 ${YAML_CPP_LIBRARIES}
 Iridescence::Iridescence
 gtsam

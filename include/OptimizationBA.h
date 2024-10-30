@@ -69,7 +69,7 @@ class LocalMapper
         bool checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, const std::vector<Eigen::Matrix4d>& observationPoses, const std::vector<Eigen::Vector2d>& pointsVec);
 
         // set the ordering for the GTSAM Optimization
-        void setOrdering(gtsam::Ordering& ordering, const std::vector<int>& localKFNumbs, const std::vector<int>& mpNumbs);
+        void setOrdering(gtsam::Ordering& ordering, const std::vector<std::pair<int,gtsam::Pose3>>& localKFNumbs, const std::vector<int>& mpNumbs);
         
         // add optimized mappoints to vector for insertion to the map
         void addMultiViewMapPointsR(const Eigen::Vector4d& posW, const std::vector<std::pair<KeyFrame *, std::pair<int, int>>>& matchesOfPoint, std::vector<MapPoint*>& pointsToAdd, KeyFrame* lastKF, const size_t& mpPos);

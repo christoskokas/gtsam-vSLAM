@@ -485,6 +485,12 @@ int FeatureMatcher::matchByRadius(TrackedKeys& lastKeys, TrackedKeys& actKeys, s
                 if ( matchedIdxsL[idx] >= 0 )
                     continue;
                 cv::KeyPoint& kPL = actKeys.keyPoints[idx];
+
+                Eigen::Vector2d actV2(kPL.pt.x, kPL.pt.y);
+                Eigen::Vector2d keyV2(key.pt.x, key.pt.y);
+                if (!Converter::checkPixelParallax(keyV2,actV2))
+                    continue;
+                
                 const int kpllevel = kPL.octave;
                 int dist = DescriptorDistance(mpDesc, actKeys.Desc.row(idx));
                 if ( dist < bestDist)

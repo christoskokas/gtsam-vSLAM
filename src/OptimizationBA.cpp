@@ -1,4 +1,5 @@
 #include "OptimizationBA.h"
+#include <gtsam/slam/BetweenFactor.h>
 
 #include <optional>
 
@@ -527,11 +528,7 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
 
 
 
-    gtsam::NonlinearFactorGraph graph;
-    gtsam::Values initialEstimate;
-    gtsam::SharedNoiseModel noiseModel = nullptr;
     
-    gtsam::Values result;
     
     gtsam::Pose3 gtsamExtrinsics(
         gtsam::Rot3(zedPtr->extrinsics.block<3, 3>(0, 0)),
@@ -541,13 +538,20 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
     const Eigen::Matrix4d estimPoseRInv = zedPtr->extrinsics.inverse();
     const Eigen::Matrix3d qc1c2 = estimPoseRInv.block<3,3>(0,0);
     const Eigen::Matrix<double,3,1> tc1c2 = estimPoseRInv.block<3,1>(0,3);
-
-    std::vector<int>kFNumbs;
+    bool first = true;
+    gtsam::Values result;
+    for (size_t iterations{0}; iterations < 2; iterations++)
+    {
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initialEstimate;
+    gtsam::SharedNoiseModel noiseModel = nullptr;
+    std::vector<std::pair<int,gtsam::Pose3>>kFNumbs;
     std::vector<int>mpNumbs;
 
     // Add Factors to the problem
     // Iterate through mappoints, add mappoints and their matched KFs
     int mpCount {0};
+    bool fixedKFyes {false};
     std::unordered_map<MapPoint*, Eigen::Vector3d>::iterator itmp, mpend(allMapPoints.end());
     for ( itmp = allMapPoints.begin(); itmp != mpend; itmp++, mpCount ++)
     {
@@ -642,11 +646,12 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                 if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
                 {
                     initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
-                    kFNumbs.emplace_back(kf->first->numb);
+                    kFNumbs.emplace_back(kf->first->numb, kfInitialPose);
                 }
                 if ( kf->first->fixed )
                 {
                     graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
+                    fixedKFyes = true;
                 }
             }
             else if (fixedKFs.find(kf->first) != fixedKFs.end())
@@ -657,13 +662,13 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                     gtsam::Rot3(kfPoseInv.block<3, 3>(0, 0)),
                     gtsam::Point3(kfPoseInv.block<3, 1>(0, 3))
                 );
-
+                fixedKFyes = true;
                 graph.add(factor);
                 
                 if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
                 {
                     initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
-                    kFNumbs.emplace_back(kf->first->numb);
+                    kFNumbs.emplace_back(kf->first->numb, kfInitialPose);
                 }
                 graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
             }
@@ -706,12 +711,13 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                     if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
                     {
                         initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
-                        kFNumbs.emplace_back(kf->first->numb);
+                        kFNumbs.emplace_back(kf->first->numb, kfInitialPose);
                     }
                     
                     if ( kf->first->fixed )
                     {
                         graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
+                        fixedKFyes=true;
                     }
                 }
                 else if (fixedKFs.find(kf->first) != fixedKFs.end())
@@ -723,10 +729,11 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
                         gtsam::Point3(kfPoseInv.block<3, 1>(0, 3))
                     );
                     
+                    fixedKFyes = true;
                     if (!initialEstimate.exists(gtsam::Symbol('x', kf->first->numb))) 
                     {
                         initialEstimate.insert(gtsam::Symbol('x', kf->first->numb), kfInitialPose);
-                        kFNumbs.emplace_back(kf->first->numb);
+                        kFNumbs.emplace_back(kf->first->numb, kfInitialPose);
                     }
                     graph.add(gtsam::NonlinearEquality<gtsam::Pose3>(gtsam::Symbol('x', kf->first->numb),kfInitialPose));
                 }
@@ -736,25 +743,41 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
         if ( mpIsOut )
             mpOutliers[mpCount] = true;
     }
-    
+
+    if (!fixedKFyes)
+        std::cout << "NO FIXED KFS!!!!!!" << std::endl;
+
+    Eigen::Matrix<double, 6, 1> sigmas;
+    sigmas << 0.01, 0.01, 0.01, 0.01, 0.01, 0.01;
+
+    auto odometryNoise = gtsam::noiseModel::Diagonal::Sigmas(sigmas);
+    std::sort(kFNumbs.begin(), kFNumbs.end(), [](const auto&a, const auto&b){
+        return a.first < b.first;
+    });
+
+    for (size_t kFnumb {0}; kFnumb < kFNumbs.size(); ++kFnumb)
+    {
+        if (kFnumb < kFNumbs.size() - 1)
+        {
+            const auto& pair = kFNumbs[kFnumb];
+            const auto& pair2 = kFNumbs[kFnumb + 1];
+            const auto relativePose = pair.second.between(pair2.second);
+            graph.add(gtsam::BetweenFactor<gtsam::Pose3>(
+            gtsam::Symbol('x', pair.first), gtsam::Symbol('x', pair2.first), relativePose, odometryNoise));
+        }
+    }
+
     gtsam::Ordering ordering;
     setOrdering(ordering, kFNumbs, mpNumbs);
     gtsam::LevenbergMarquardtParams params;
     params.maxIterations = 10;
     params.relativeErrorTol = 1e-5;
     params.absoluteErrorTol = 1e-5;
-    try
-    {
-        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, ordering, params);
-        result = optimizer.optimize();
-    }
-    catch(const gtsam::IndeterminantLinearSystemException& e)
-    {
-        std::cout << "Bundle Adjustment Failed... : IndeterminantLinearSystemException" << std::endl;
-        map->keyFrameAdded = false;
-        map->LBADone = true;
-        return;
-    }
+    if ( first )
+        params.maxIterations = 5;
+
+    gtsam::LevenbergMarquardtOptimizer optimizer(graph, initialEstimate, ordering, params);
+    result = optimizer.optimize();
     
 
     std::vector<std::pair<KeyFrame*, MapPoint*>> emptyVec;
@@ -846,7 +869,8 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
 
         }
     }
-
+    first = false;
+    }
     // Update KeyFrame Poses and MPs Positions
     std::lock_guard<std::mutex> lock(map->mapMutex);
 
@@ -915,14 +939,14 @@ void LocalMapper::localBA(std::vector<KeyFrame *>& actKeyF)
     
 }
 
-void LocalMapper::setOrdering(gtsam::Ordering& ordering, const std::vector<int>& localKFNumbs, const std::vector<int>& mpNumbs)
+void LocalMapper::setOrdering(gtsam::Ordering& ordering, const std::vector<std::pair<int,gtsam::Pose3>>& localKFNumbs, const std::vector<int>& mpNumbs)
 {
     for (const auto& mpNumb : mpNumbs)
     {
         ordering.push_back(gtsam::Symbol('l', mpNumb));
     }
 
-    for (const auto& kfNumb : localKFNumbs)
+    for (const auto& [kfNumb, kFPose] : localKFNumbs)
     {
         ordering.push_back(gtsam::Symbol('x', kfNumb));
     }

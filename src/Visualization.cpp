@@ -126,24 +126,10 @@ void Visualizer::RenderScene() {
   
   mViewer = guik::LightViewer::instance();
 
-  // float angle = 0.0f;
-
   mViewer->disable_xy_grid();
 
   mViewer->set_clear_color({0.0f, 0.0f, 0.0f, 1.0f});
-
-  mViewer->register_ui_callback("ui", [&]() {
-    // In the callback, you can call ImGui commands to create your UI.
-    // Here, we use "DragFloat" and "Button" to create a simple UI.
-    // ImGui::DragFloat("Angle", &angle, 0.01f);
-
-    // if (ImGui::Button("Close")) 
-    // {
-    //   mViewer->close();
-    // }
-  });
   
-  // Spin the viewer until it gets closed
   while (mViewer->spin_once()) 
   {
     DrawPoints();

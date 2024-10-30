@@ -3,26 +3,26 @@
 namespace GTSAM_VIOSLAM
 {
 
-// VSlamSystem::VSlamSystem(std::shared_ptr<ConfigFile> configFile, SlamMode mode /* = SlamMode::STEREO*/)
-// {
+VSlamSystem::VSlamSystem(std::shared_ptr<ConfigFile> configFile, SlamMode mode /* = SlamMode::STEREO*/) : mConfigFile(configFile), mMode(mode)
+{
 
-//   // mMap = std::make_shared<Map>();
+  mMap = std::make_shared<Map>();
 
-//   // if (mode == SlamMode::MONOCULAR)
-//   // {
-//   //   InitializeMonocular();
-//   // }
-//   // else
-//   // {
-//   //   InitializeStereo();
-//   //   mLocalMapper = std::make_shared<LocalMapper>(mMap, mStereoCamera, mFeatureMatcher);
-//   //   mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);
-//   // }
+  if (mode == SlamMode::MONOCULAR)
+  {
+    InitializeMonocular();
+  }
+  else
+  {
+    InitializeStereo();
+    mLocalMapper = std::make_shared<LocalMapper>(mMap, mStereoCamera, mFeatureMatcher);
+    mOptimizerThread = std::thread(&LocalMapper::beginLocalMapping, mLocalMapper);
+  }
 
   
-//   // mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
-//   // mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
-// }
+  mVisualizer = std::make_shared<Visualizer>(mStereoCamera, mMap);
+  mVisualizationThread = std::thread(&Visualizer::RenderScene, mVisualizer);
+}
 
 void VSlamSystem::InitializeMonocular()
 {
@@ -66,9 +66,7 @@ void VSlamSystem::GetStereoCamera(std::shared_ptr<StereoCamera>& stereoCamera)
 
 void VSlamSystem::ExitSystem()
 {
-  mFeatureTrackingThread.join();
-  mOptimizerThread.join();
-  mVisualizationThread.join();
+
 }
 
 void VSlamSystem::TrackStereo(const cv::Mat& imLRect, const cv::Mat& imRRect, const int frameNumb)
@@ -84,6 +82,45 @@ void VSlamSystem::TrackStereoIMU(const cv::Mat& imLRect, const cv::Mat& imRRect,
 void VSlamSystem::TrackMonoIMU(const cv::Mat& imLRect, const int frameNumb, const IMUData& IMUDataVal)
 {
   mFeatureTracker->TrackImageMonoIMU(imLRect, frameNumb, std::make_shared<IMUData>(IMUDataVal));
+}
+
+void VSlamSystem::saveTrajectoryAndPosition(const std::string& filepath, const std::string& filepathPosition)
+{
+    std::vector<KeyFrame*>& allFrames = mMap->allFramesPoses;
+    KeyFrame* closeKF = allFrames[0];
+    std::ofstream datafile(filepath);
+    std::ofstream datafilePos(filepathPosition);
+    std::vector<KeyFrame*>::iterator it;
+    std::vector<KeyFrame*>::const_iterator end(allFrames.end());
+    for ( it = allFrames.begin(); it != end; it ++)
+    {
+        KeyFrame* candKF = *it;
+        Eigen::Matrix4d matT;
+        if ( candKF->keyF )
+        {
+            matT = candKF->pose.pose;
+            closeKF = candKF;
+        }
+        else
+        {
+            matT = (closeKF->pose.getPose() * candKF->pose.refPose);
+        }
+        Eigen::Matrix4d mat = matT.transpose();
+        for (int32_t i{0}; i < 12; i ++)
+        {
+            if ( i == 0 )
+                datafile << mat(i);
+            else
+                datafile << " " << mat(i);
+            if ( i == 3 || i == 7 || i == 11 )
+                datafilePos << mat(i) << " ";
+        }
+        datafile << '\n';
+        datafilePos << '\n';
+    }
+    datafile.close();
+    datafilePos.close();
+
 }
 
 } // namespace GTSAM_VIOSLAM

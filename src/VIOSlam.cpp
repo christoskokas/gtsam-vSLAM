@@ -1,3 +1,4 @@
+#define EIGEN_MALLOC_ALREADY_ALIGNED 0
 #include "System.h"
 #include "Settings.h"
 #include <opencv2/calib3d.hpp>
@@ -145,7 +146,6 @@ int main(int argc, char **argv)
 
         return -1;
     }
-    std::cout << "here" << std::endl;
     std::string file = argv[1];
     auto confFile = std::make_shared<GTSAM_VIOSLAM::ConfigFile>(file.c_str());
 
@@ -175,6 +175,7 @@ int main(int argc, char **argv)
     slamSystem->GetStereoCamera(StereoCam);
 
     const std::string imagesPath = confFile->getValue<std::string>("imagesPath");
+
 
     const std::string dataset = confFile->getValue<std::string>("dataset");
 
@@ -285,7 +286,6 @@ int main(int argc, char **argv)
         cv::initUndistortRectifyMap(StereoCam->mCameraRight->K, StereoCam->mCameraRight->D, StereoCam->mCameraRight->R, StereoCam->mCameraRight->P.rowRange(0,3).colRange(0,3), cv::Size(width, height), CV_32F, rectMap[1][0], rectMap[1][1]);
     }
 
-
     for ( size_t frameNumb{0}; frameNumb < numberFrames; frameNumb++)
     {
 
@@ -314,12 +314,15 @@ int main(int argc, char **argv)
             break;
 
     }
+    std::cout << "System Shutdown!" << std::endl;
+    slamSystem->ExitSystem();
+    std::cout << "Saving Trajectory.." << std::endl;
+    slamSystem->saveTrajectoryAndPosition("single_cam_im_tra.txt", "single_cam_im_pos.txt");
+    std::cout << "Trajectory Saved!" << std::endl;
     while ( flag != 1 )
     {
         usleep(1e6);
     }
-    std::cout << "System Shutdown!" << std::endl;
-    slamSystem->ExitSystem();
     exit(SIGINT);
 
 

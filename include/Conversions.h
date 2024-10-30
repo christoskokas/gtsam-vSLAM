@@ -103,7 +103,7 @@ struct Converter
         return abs(angle); // Angle in radians
     }
 
-    static bool isParallaxSufficient(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2, double threshold) 
+    static bool isParallaxSufficient(const Eigen::Matrix4d& pose1, const Eigen::Matrix4d& pose2, double threshold = parallaxThreshold) 
     {
         double parallaxAngle = calculateParallaxAngle(pose1, pose2);
         return parallaxAngle > threshold;
@@ -126,7 +126,6 @@ struct Converter
 
         double rotation_angle = std::acos(cos_theta) * (180.0 / M_PI);
 
-        std::cout << "baseline : " << baseline << " rotation angle : " << rotation_angle << std::endl;
 
         if (baseline < baseline_threshold) 
             return false;

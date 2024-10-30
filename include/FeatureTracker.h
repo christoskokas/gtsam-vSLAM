@@ -49,6 +49,11 @@ class FeatureTracker
         // MONO Params
         bool secondKF {false};
         int numOfMonoMPs {0};
+        bool monoInitialized {false};
+        int KFsUntilInitialized {0};
+        const int minNumberOfKFsForMp {2};
+        // reprojection threshold to find outliers
+        const float reprjThreshold {7.815f};
 
         float precCheckMatches {0.9f};
 
@@ -76,7 +81,6 @@ class FeatureTracker
         gtsam::imuBias::ConstantBias initialBias;
         gtsam::Vector3 predVelocity {0,0,0};
 
-        bool monoInitialized {false};
 
     public :
 
@@ -126,7 +130,7 @@ class FeatureTracker
 
         // insert KF if needed
         void insertKeyFrame(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const int nStereo, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm);
-        void insertKeyFrameMono(TrackedKeys& keysLeft, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs, const Eigen::Matrix4d& estimPose, std::vector<bool>& MPsOutliers, cv::Mat& leftIm, cv::Mat& rleftIm);
+        void insertKeyFrameMono(TrackedKeys& keysLeft, const Eigen::Matrix4d& estimPose, cv::Mat& leftIm, cv::Mat& rleftIm);
 
 
         // check 2d Error
@@ -153,10 +157,10 @@ class FeatureTracker
         void addMappointsMono(std::vector<MapPoint*>& pointsToAdd, std::vector<KeyFrame *>& actKeyF, std::vector<int>& matchedIdxsL, std::vector<std::pair<int,int>>& matchesIdxs);
 
         // calculate 3D point using gtsam::triangulatePoint3 
-        bool calculateMPFromMono(Eigen::Vector4d& p4d, std::vector<MapPoint*> pointsToAdd, std::vector<std::pair<KeyFrame*,int>>& keys);
+        bool calculateMPFromMono(KeyFrame* lastKF, Eigen::Vector4d& p4d, std::vector<MapPoint*> pointsToAdd, std::vector<std::pair<KeyFrame*,int>>& keys);
         // add the new mappoints to the map
         void addNewMapPoints(std::vector<MapPoint*>& pointsToAdd);
-
+        bool checkReprojError(KeyFrame* lastKF, Eigen::Vector4d& calcVec, std::vector<std::pair<KeyFrame *, int>>& matchesOfPoint, const std::vector<Eigen::Matrix4d>& observationPoses, const std::vector<Eigen::Vector2d>& observations);
 };
 
 
